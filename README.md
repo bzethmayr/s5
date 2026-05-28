@@ -307,6 +307,6 @@ result = U ∪ C = 4 ∪ 1 = 5 elements
 assign(D=U): U has size 5
 ```
 
-Binary pattern for 42: `101010` = (1×2+0)×2+1... Wait, the actual sequence
+Binary pattern for 42: `101010` = (1×2+0)×2+1... The actual sequence
 is: 1, 2, 4, 5, 10, 20, 21, 42. This is: ×2, ×2, +1, ×2, ×2, +1, ×2.
 42 = ((((1×2)×2+1)×2)×2+1)×2 = 42.
