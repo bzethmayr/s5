@@ -226,12 +226,6 @@ Set sets Set's sets Set's sets set Set's set     -- C = U ∪ U = {∅, ∅}
 Set set Set's sets Sets set sets' set sets set Set's sets  -- U = U \ C[2]
 ```
 
-Instr 2, B operand address is `Sets set sets' set sets`. The integer `sets`=0, `set`=1 → value (0×2+1)=1, then lookahead: next `set` would start an address → stop. Integer = 1. So B = C[1] = ∅. But wait:
-
-Actually `set sets` = `set`(1), `sets`(0) → 10 binary = 2. Then `set` is the separator.
-
-Wait, let me re-read: `Sets set sets' set sets set`
-
 Tokens: `Sets` `set` `sets'` `set` `sets` `set`
 
 After `Sets set sets'`: start integer parsing. `set` = bit 1 → value=1. Next is `sets` = bit 0 → value=2. Next is `set` — bounded lookahead: after this `set` would `"Set's"` or `"Sets"` follow? Next token is `Set's sets` (D address). So `Set's` follows → yes, address follows → stop at the `set` without consuming. Return integer = 2.
