@@ -8,6 +8,7 @@ class TokenType:
     SET_APOS = 'SET_APOS'
     SETS_APOS = 'SETS_APOS'
     SETS_CAP = 'SETS_CAP'
+    SETS_CAP_APOS = 'SETS_CAP_APOS'
 
 
 class Opcode:
@@ -15,6 +16,7 @@ class Opcode:
     UNION = 'UNION'
     INTERSECTION = 'INTERSECTION'
     DIFFERENCE = 'DIFFERENCE'
+    SUBR = 'SUBR'
 
 
 class AddressType:
@@ -33,13 +35,14 @@ class Address:
 
 
 class Instruction:
-    __slots__ = ('opcode', 'n', 'addr_a', 'addr_b', 'addr_dest')
-    def __init__(self, opcode, n=None, addr_a=None, addr_b=None, addr_dest=None):
+    __slots__ = ('opcode', 'n', 'addr_a', 'addr_b', 'addr_dest', 'subr_body')
+    def __init__(self, opcode, n=None, addr_a=None, addr_b=None, addr_dest=None, subr_body=None):
         self.opcode = opcode
         self.n = n
         self.addr_a = addr_a
         self.addr_b = addr_b
         self.addr_dest = addr_dest
+        self.subr_body = subr_body
 
 
 class TokenizerError(Exception):
@@ -69,6 +72,8 @@ def tokenize(source):
             tokens.append(TokenType.SETS_APOS)
         elif word == 'Sets':
             tokens.append(TokenType.SETS_CAP)
+        elif word == "Sets'":
+            tokens.append(TokenType.SETS_CAP_APOS)
         else:
             raise TokenizerError(f"unknown token: {word!r}")
     return tokens
@@ -98,7 +103,26 @@ class Parser:
     def parse_program(self):
         instructions = []
         while self.pos < len(self.tokens):
-            instructions.append(self.parse_instruction())
+            t = self.peek()
+            if t == TokenType.SETS_CAP_APOS:
+                self.consume()
+                if self.peek() == TokenType.SETS_CAP_APOS:
+                    self.consume()
+                    loc = None
+                    t2 = self.peek()
+                    if t2 in (TokenType.SET_APOS, TokenType.SETS_CAP):
+                        loc = self.parse_address()
+                    body = []
+                    while self.peek() == TokenType.SET:
+                        body.append(self.parse_instruction())
+                    if self.peek() != TokenType.SETS_CAP_APOS:
+                        raise SyntaxError_("expected Sets' to end subroutine")
+                    self.consume()
+                    instructions.append(Instruction(Opcode.SUBR, subr_body=body, addr_a=loc))
+                else:
+                    raise SyntaxError_("unexpected bare Sets'")
+            else:
+                instructions.append(self.parse_instruction())
         return instructions
 
     def parse_instruction(self):
@@ -121,6 +145,9 @@ class Parser:
         elif t == TokenType.SET_LOWER:
             self.consume()
             return Opcode.DIFFERENCE
+        elif t == TokenType.SETS_CAP_APOS:
+            self.consume()
+            return Opcode.SUBR
         elif t is None:
             raise SyntaxError_("expected opcode, got end of input")
         else:
@@ -131,6 +158,12 @@ class Parser:
             self.expect(TokenType.SETS_APOS)
             n = self._parse_integer()
             return Instruction(opcode, n=n)
+        elif opcode == Opcode.SUBR:
+            t = self.peek()
+            loc = None
+            if t in (TokenType.SET_APOS, TokenType.SETS_CAP):
+                loc = self.parse_address()
+            return Instruction(opcode, addr_a=loc)
         else:
             a = self.parse_address()
             b = self.parse_address(bound_integer=True)
@@ -242,6 +275,20 @@ class S5Set:
         return S5Set._from_items(result)
 
 
+class LineSet(S5Set):
+    __slots__ = ('_instruction',)
+    def __init__(self, instruction):
+        super().__init__()
+        self._instruction = instruction
+
+
+class SubroutineSet(S5Set):
+    __slots__ = ('_body',)
+    def __init__(self, body, items):
+        super().__init__(items)
+        self._body = body
+
+
 class Executor:
     def __init__(self):
         self.U = S5Set([S5Set()])
@@ -297,6 +344,24 @@ class Executor:
                     f"C[{instr.n}] out of bounds (len={len(self.C)})")
             self.C = self.C[instr.n]
             self._check_halt()
+        elif instr.opcode == Opcode.SUBR and instr.subr_body is not None:
+            lines = tuple(LineSet(inst) for inst in instr.subr_body)
+            subroutine = SubroutineSet(instr.subr_body, lines)
+            if instr.addr_a is None:
+                self.C = subroutine
+            else:
+                self.assign(instr.addr_a, subroutine)
+            self._check_halt()
+        elif instr.opcode == Opcode.SUBR:
+            if instr.addr_a is None:
+                if self.C is None:
+                    raise RuntimeError_("C is undefined")
+                subr = self.C
+            else:
+                subr = self.resolve(instr.addr_a)
+            if not isinstance(subr, SubroutineSet):
+                raise RuntimeError_("not a subroutine")
+            self.run(subr._body)
         else:
             a = self.resolve(instr.addr_a)
             b = self.resolve(instr.addr_b)

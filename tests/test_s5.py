@@ -2,7 +2,7 @@ import subprocess
 import sys
 from pathlib import Path
 import pytest
-from s5 import tokenize, Parser, Executor
+from s5 import tokenize, Parser, Executor, SubroutineSet, LineSet
 
 HERE = Path(__file__).parent
 ROOT = HERE.parent
@@ -125,3 +125,119 @@ def test_compute_42():
     status = executor.run(parser.parse_program())
     assert status == "finished"
     assert len(executor.U) == 42
+
+
+def run_src(src):
+    return Executor().run(Parser(tokenize(src)).parse_program())
+
+
+class TestSubr:
+    def test_subr_decl_default(self):
+        src = (
+            "Sets' Sets'\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'\n"
+            "Set Sets'"
+        )
+        assert run_src(src) == "finished"
+
+    def test_subr_explicit_c(self):
+        src = (
+            "Sets' Sets' Set's set\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'\n"
+            "Set Sets' Set's set"
+        )
+        assert run_src(src) == "finished"
+
+    def test_subr_call_and_return(self):
+        src = (
+            "Sets' Sets'\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'\n"
+            "Set sets Set's sets Set's sets set Set's sets\n"
+            "Set Sets'"
+        )
+        tokens = tokenize(src)
+        parser = Parser(tokens)
+        executor = Executor()
+        status = executor.run(parser.parse_program())
+        assert status == "finished"
+        assert len(executor.U) == 4
+
+    def test_subr_halt_inside(self):
+        src = (
+            "Sets' Sets'\n"
+            "  Set set Set's sets Set's sets set Set's sets\n"
+            "Sets'\n"
+            "Set Sets'"
+        )
+        out, err, rc = run(src)
+        assert out == "halted"
+
+    def test_subr_at_cn(self):
+        src = (
+            "Set sets Set's sets Set's sets set Set's set\n"
+            "Sets' Sets' Sets set sets' sets\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'\n"
+            "Set Sets' Sets set sets' sets"
+        )
+        out, err, rc = run(src)
+        assert out == "finished"
+
+    def test_subr_stores_as_subroutineseet(self):
+        src = (
+            "Sets' Sets'\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'"
+        )
+        tokens = tokenize(src)
+        parser = Parser(tokens)
+        executor = Executor()
+        executor.run(parser.parse_program())
+        assert isinstance(executor.C, SubroutineSet)
+        assert len(executor.C) == 1
+
+    def test_subr_unclosed_decl(self):
+        src = (
+            "Sets' Sets'\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+        )
+        out, err, rc = run(src)
+        assert "syntax error" in err
+
+    def test_subr_bare_sets_apos(self):
+        out, err, rc = run("Sets'")
+        assert "syntax error" in err
+
+    def test_subr_invoke_not_subroutine(self):
+        src = (
+            "Set sets Set's sets Set's sets set Set's set\n"
+            "Set Sets'"
+        )
+        out, err, rc = run(src)
+        assert "not a subroutine" in err
+
+    def test_subr_invoke_undefined_c(self):
+        out, err, rc = run("Set Sets'")
+        assert "C is undefined" in err
+
+    def test_subr_compute_42_golfed(self):
+        src = (
+            "Set sets Set's sets Set's sets set Set's set\n"
+            "Sets' Sets' Sets set sets' set\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "  Set sets Set's sets Sets sets' Sets set sets' sets set Set's sets\n"
+            "Sets'\n"
+            "Set Sets' Sets set sets' set\n"
+            "Set Sets' Sets set sets' set\n"
+            "Set sets Set's sets Set's sets set Set's sets"
+        )
+        tokens = tokenize(src)
+        parser = Parser(tokens)
+        executor = Executor()
+        status = executor.run(parser.parse_program())
+        assert status == "finished"
+        assert len(executor.U) == 42
