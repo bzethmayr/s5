@@ -12,6 +12,7 @@ Every token is a form of `"set"`. All computation is over ordered sets of sets.
 | `Set's`   | intersection opcode / base-address prefix   |
 | `sets'`   | integer suffix / subset-select suffix       |
 | `Sets`    | derived-address / wrap-address / subset-select opcode prefix |
+| `Sets'`   | declaration / end                           |
 
 ## Initial state
 
@@ -99,6 +100,7 @@ for each instruction:
 - **Wrap** (`"Sets sets'"`): wraps the resolved inner address into a singleton set `{value}`. Read-only — cannot be used as destination.
 
 ## Simple cases
+See [tests](tests) for more cases.
 
 ### Empty program
 
