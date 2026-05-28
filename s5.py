@@ -317,7 +317,17 @@ class Executor:
         return "finished"
 
 
+def detect_mode():
+    if len(sys.argv) > 1:
+        return "file"
+    return "repl" if sys.stdin.isatty() else "piped"
+
+
 def main():
+    mode = detect_mode()
+    if mode == "repl":
+        sys.stderr = sys.stdout
+
     if len(sys.argv) > 1:
         with open(sys.argv[1], encoding='utf-8-sig') as f:
             source = f.read()
