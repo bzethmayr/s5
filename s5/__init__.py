@@ -9,6 +9,7 @@ class TokenType:
     PLURAL_APOS = 'PLURAL_APOS'
     PLURAL_CAP = 'PLURAL_CAP'
     PLURAL_CAP_APOS = 'PLURAL_CAP_APOS'
+    SINGULAR_LOWER_APOS_APOS = 'SINGULAR_LOWER_APOS_APOS'
 
 
 TOKEN_DISPLAY = {
@@ -19,6 +20,7 @@ TOKEN_DISPLAY = {
     TokenType.PLURAL_APOS: "sets'",
     TokenType.PLURAL_CAP: "Sets",
     TokenType.PLURAL_CAP_APOS: "Sets'",
+    TokenType.SINGULAR_LOWER_APOS_APOS: "set's'",
 }
 
 
@@ -35,6 +37,7 @@ class AddressType:
     C = 'C'
     DERIVED = 'DERIVED'
     WRAP = 'WRAP'
+    IO = 'IO'
 
 
 class Address:
@@ -85,6 +88,8 @@ def tokenize(source):
             tokens.append(TokenType.PLURAL_CAP)
         elif word == "Sets'":
             tokens.append(TokenType.PLURAL_CAP_APOS)
+        elif word == "set's'":
+            tokens.append(TokenType.SINGULAR_LOWER_APOS_APOS)
         else:
             raise TokenizerError(f"unknown token: {word!r}")
     return tokens
@@ -211,6 +216,9 @@ class Parser:
                 return Address(AddressType.DERIVED, index=n)
             else:
                 raise SyntaxError_(f"expected 'set' or 'sets'' after 'Sets', got {t2}")
+        elif t == TokenType.SINGULAR_LOWER_APOS_APOS:
+            self.consume()
+            return Address(AddressType.IO)
         else:
             raise SyntaxError_(f"expected address, got {TOKEN_DISPLAY.get(t, t)}")
 
@@ -304,6 +312,22 @@ def set_value(s):
     return value
 
 
+def int_to_s5set(n):
+    """Inverse of set_value: construct an S5Set from an integer."""
+    if n == 0:
+        return S5Set()
+    elements = []
+    while n > 0:
+        if n % 2 == 0:
+            elements.append(S5Set([S5Set()]))
+            n //= 2
+        else:
+            elements.append(S5Set())
+            n -= 1
+    elements.reverse()
+    return S5Set(elements)
+
+
 class LineSet(S5Set):
     __slots__ = ('_instruction',)
     def __init__(self, instruction):
@@ -341,11 +365,24 @@ class Executor:
         elif addr.type == AddressType.WRAP:
             inner = self.resolve(addr.sub_addr)
             return S5Set([inner])
+        elif addr.type == AddressType.IO:
+            line = sys.stdin.readline()
+            if not line:
+                raise RuntimeError_("input: unexpected EOF")
+            try:
+                n = int(line.strip())
+            except ValueError:
+                raise RuntimeError_(
+                    f"input: expected integer, got {line.strip()!r}")
+            return int_to_s5set(n)
 
     def assign(self, addr, value):
         if addr.type == AddressType.WRAP:
             raise RuntimeError_("cannot assign to a wrap address")
-        if addr.type == AddressType.U:
+        if addr.type == AddressType.IO:
+            n = set_value(value)
+            print(n)
+        elif addr.type == AddressType.U:
             self.U = value
         elif addr.type == AddressType.C:
             self.C = value
