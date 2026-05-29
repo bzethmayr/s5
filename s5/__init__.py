@@ -2,13 +2,24 @@ import sys
 
 
 class TokenType:
-    SET = 'SET'
-    SET_LOWER = 'SET_LOWER'
-    SETS_LOWER = 'SETS_LOWER'
-    SET_APOS = 'SET_APOS'
-    SETS_APOS = 'SETS_APOS'
-    SETS_CAP = 'SETS_CAP'
-    SETS_CAP_APOS = 'SETS_CAP_APOS'
+    SINGULAR = 'SINGULAR'
+    SINGULAR_LOWER = 'SINGULAR_LOWER'
+    PLURAL_LOWER = 'PLURAL_LOWER'
+    SINGULAR_APOS = 'SINGULAR_APOS'
+    PLURAL_APOS = 'PLURAL_APOS'
+    PLURAL_CAP = 'PLURAL_CAP'
+    PLURAL_CAP_APOS = 'PLURAL_CAP_APOS'
+
+
+TOKEN_DISPLAY = {
+    TokenType.SINGULAR: "Set",
+    TokenType.SINGULAR_LOWER: "set",
+    TokenType.PLURAL_LOWER: "sets",
+    TokenType.SINGULAR_APOS: "Set's",
+    TokenType.PLURAL_APOS: "sets'",
+    TokenType.PLURAL_CAP: "Sets",
+    TokenType.PLURAL_CAP_APOS: "Sets'",
+}
 
 
 class Opcode:
@@ -61,19 +72,19 @@ def tokenize(source):
     tokens = []
     for word in source.split():
         if word == 'Set':
-            tokens.append(TokenType.SET)
+            tokens.append(TokenType.SINGULAR)
         elif word == 'set':
-            tokens.append(TokenType.SET_LOWER)
+            tokens.append(TokenType.SINGULAR_LOWER)
         elif word == 'sets':
-            tokens.append(TokenType.SETS_LOWER)
+            tokens.append(TokenType.PLURAL_LOWER)
         elif word == "Set's":
-            tokens.append(TokenType.SET_APOS)
+            tokens.append(TokenType.SINGULAR_APOS)
         elif word == "sets'":
-            tokens.append(TokenType.SETS_APOS)
+            tokens.append(TokenType.PLURAL_APOS)
         elif word == 'Sets':
-            tokens.append(TokenType.SETS_CAP)
+            tokens.append(TokenType.PLURAL_CAP)
         elif word == "Sets'":
-            tokens.append(TokenType.SETS_CAP_APOS)
+            tokens.append(TokenType.PLURAL_CAP_APOS)
         else:
             raise TokenizerError(f"unknown token: {word!r}")
     return tokens
@@ -97,25 +108,27 @@ class Parser:
     def expect(self, tt):
         t = self.consume()
         if t != tt:
-            raise SyntaxError_(f"expected {tt}, got {t}")
+            d_tt = TOKEN_DISPLAY.get(tt, tt)
+            d_t = TOKEN_DISPLAY.get(t, t)
+            raise SyntaxError_(f"expected {d_tt}, got {d_t}")
         return t
 
     def parse_program(self):
         instructions = []
         while self.pos < len(self.tokens):
             t = self.peek()
-            if t == TokenType.SETS_CAP_APOS:
+            if t == TokenType.PLURAL_CAP_APOS:
                 self.consume()
-                if self.peek() == TokenType.SETS_CAP_APOS:
+                if self.peek() == TokenType.PLURAL_CAP_APOS:
                     self.consume()
                     loc = None
                     t2 = self.peek()
-                    if t2 in (TokenType.SET_APOS, TokenType.SETS_CAP):
+                    if t2 in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP):
                         loc = self.parse_address()
                     body = []
-                    while self.peek() == TokenType.SET:
+                    while self.peek() == TokenType.SINGULAR:
                         body.append(self.parse_instruction())
-                    if self.peek() != TokenType.SETS_CAP_APOS:
+                    if self.peek() != TokenType.PLURAL_CAP_APOS:
                         raise SyntaxError_("expected Sets' to end subroutine")
                     self.consume()
                     instructions.append(Instruction(Opcode.SUBR, subr_body=body, addr_a=loc))
@@ -126,98 +139,98 @@ class Parser:
         return instructions
 
     def parse_instruction(self):
-        self.expect(TokenType.SET)
+        self.expect(TokenType.SINGULAR)
         opcode = self.parse_opcode()
         return self.parse_operands(opcode)
 
     def parse_opcode(self):
         t = self.peek()
-        if t == TokenType.SETS_CAP:
+        if t == TokenType.PLURAL_CAP:
             self.consume()
-            self.expect(TokenType.SET_LOWER)
+            self.expect(TokenType.SINGULAR_LOWER)
             return Opcode.SUBSET_SELECT
-        elif t == TokenType.SETS_LOWER:
+        elif t == TokenType.PLURAL_LOWER:
             self.consume()
             return Opcode.UNION
-        elif t == TokenType.SET_APOS:
+        elif t == TokenType.SINGULAR_APOS:
             self.consume()
             return Opcode.INTERSECTION
-        elif t == TokenType.SET_LOWER:
+        elif t == TokenType.SINGULAR_LOWER:
             self.consume()
             return Opcode.DIFFERENCE
-        elif t == TokenType.SETS_CAP_APOS:
+        elif t == TokenType.PLURAL_CAP_APOS:
             self.consume()
             return Opcode.SUBR
         elif t is None:
             raise SyntaxError_("expected opcode, got end of input")
         else:
-            raise SyntaxError_(f"expected opcode, got {t}")
+            raise SyntaxError_(f"expected opcode, got {TOKEN_DISPLAY.get(t, t)}")
 
     def parse_operands(self, opcode):
         if opcode == Opcode.SUBSET_SELECT:
-            self.expect(TokenType.SETS_APOS)
+            self.expect(TokenType.PLURAL_APOS)
             n = self._parse_integer()
             return Instruction(opcode, n=n)
         elif opcode == Opcode.SUBR:
             t = self.peek()
             loc = None
-            if t in (TokenType.SET_APOS, TokenType.SETS_CAP):
+            if t in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP):
                 loc = self.parse_address()
             return Instruction(opcode, addr_a=loc)
         else:
             a = self.parse_address()
             b = self.parse_address(bound_integer=True)
-            self.expect(TokenType.SET_LOWER)
+            self.expect(TokenType.SINGULAR_LOWER)
             d = self.parse_address()
             return Instruction(opcode, addr_a=a, addr_b=b, addr_dest=d)
 
     def parse_address(self, bound_integer=False):
         t = self.peek()
-        if t == TokenType.SET_APOS:
+        if t == TokenType.SINGULAR_APOS:
             self.consume()
             t2 = self.peek()
-            if t2 == TokenType.SETS_LOWER:
+            if t2 == TokenType.PLURAL_LOWER:
                 self.consume()
                 return Address(AddressType.U)
-            elif t2 == TokenType.SET_LOWER:
+            elif t2 == TokenType.SINGULAR_LOWER:
                 self.consume()
                 return Address(AddressType.C)
             else:
                 raise SyntaxError_(f"expected 'sets' or 'set' after 'Set's', got {t2}")
-        elif t == TokenType.SETS_CAP:
+        elif t == TokenType.PLURAL_CAP:
             self.consume()
             t2 = self.peek()
-            if t2 == TokenType.SETS_APOS:
+            if t2 == TokenType.PLURAL_APOS:
                 self.consume()
                 inner = self.parse_address(bound_integer)
                 return Address(AddressType.WRAP, sub_addr=inner)
-            elif t2 == TokenType.SET_LOWER:
+            elif t2 == TokenType.SINGULAR_LOWER:
                 self.consume()
-                self.expect(TokenType.SETS_APOS)
+                self.expect(TokenType.PLURAL_APOS)
                 n = self._parse_integer(bound_integer)
                 return Address(AddressType.DERIVED, index=n)
             else:
                 raise SyntaxError_(f"expected 'set' or 'sets'' after 'Sets', got {t2}")
         else:
-            raise SyntaxError_(f"expected address, got {t}")
+            raise SyntaxError_(f"expected address, got {TOKEN_DISPLAY.get(t, t)}")
 
     def _is_followed_by_address(self):
         save = self.pos
         self.pos += 1
         n = self.peek()
         self.pos = save
-        return n in (TokenType.SET_APOS, TokenType.SETS_CAP)
+        return n in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP)
 
     def _parse_integer(self, stop_at_separator=False):
         value = 0
-        while self.peek() in (TokenType.SET_LOWER, TokenType.SETS_LOWER):
+        while self.peek() in (TokenType.SINGULAR_LOWER, TokenType.PLURAL_LOWER):
             t = self.peek()
-            if t == TokenType.SET_LOWER and stop_at_separator:
+            if t == TokenType.SINGULAR_LOWER and stop_at_separator:
                 if self._is_followed_by_address():
                     return value
             self.consume()
-            if t == TokenType.SET_LOWER:
-                value = value * 2 + 1
+            if t == TokenType.SINGULAR_LOWER:
+                value = value + 1
             else:
                 value = value * 2
         return value
@@ -273,6 +286,22 @@ class S5Set:
         other_set = set(other._items)
         result = [item for item in self._items if item not in other_set]
         return S5Set._from_items(result)
+
+
+def set_value(s):
+    """Numerical value of an ordered set under mixed-unary encoding.
+    
+    Start from 0; for each element left-to-right:
+      ∅ (empty set) → +1
+      nonempty       → ×2
+    """
+    value = 0
+    for elem in s:
+        if len(elem) == 0:
+            value += 1
+        else:
+            value *= 2
+    return value
 
 
 class LineSet(S5Set):

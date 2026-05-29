@@ -7,8 +7,8 @@ Every token is a form of `"set"`. All computation is over ordered sets of sets. 
 | Token     | Kind                                        |
 |-----------|---------------------------------------------|
 | `Set`     | instruction prefix                          |
-| `set`     | difference opcode / integer bit **1** / binary separator |
-| `sets`    | union opcode / integer bit **0** / U-address suffix |
+| `set`     | difference opcode / integer **+1** / binary separator |
+| `sets`    | union opcode / integer **×2** / U-address suffix |
 | `Set's`   | intersection opcode / base-address prefix   |
 | `sets'`   | integer suffix / subset-select suffix       |
 | `Sets`    | derived-address / wrap-address / subset-select opcode prefix |
@@ -52,7 +52,7 @@ H = false      Halted: set when len(U) reaches 0 after an instruction
 
 <wrap_addr>      ::= "Sets" "sets'" <address>
 
-<integer>        ::= ("set" | "sets")*    -- binary, little-endian
+<integer>        ::= ("set" | "sets")*    -- mixed-unary: set=+1, sets=×2
 ```
 
 ### Bounded integer (B-operand only)
@@ -69,18 +69,37 @@ lookahead: if the next token after a `"set"` would start a new address
 <final_bit>       ::= "set"      -- consumed, then expect separator
 ```
 
-### Integer encoding
+### Values
 
-Binary little-endian: `"set"` = **1**, `"sets"` = **0**.
+Every set has a numerical value.  For an ordered set S = (e₁, ..., eₙ),
+start with r = 0 and process each element left-to-right:
 
-| String        | Value |
-|---------------|-------|
-| `sets`        | 0     |
-| `set`         | 1     |
-| `set sets`    | 2     |
-| `set set`     | 3     |
-| `set sets sets` | 4   |
-| `set sets set` | 5    |
+- **∅** (empty set): `r ← r + 1`
+- **nonempty** set:  `r ← r × 2`
+
+| Set             | Computation          | Value |
+|-----------------|----------------------|-------|
+| `{}`            | 0                    | **0** |
+| `{∅}`           | 0→+1                 | **1** |
+| `{{∅}}`         | 0→×2                 | **0** |
+| `{∅, {∅}}`     | 0→+1=1→×2           | **2** |
+| `{∅, {∅}, ∅}`  | 0→+1=1→×2=2→+1     | **3** |
+| `{∅, {∅}, ∅, ∅}` | 0→+1=1→×2=2→+1=3→+1 | **4** |
+
+The same scheme defines integer values for token sequences in the grammar.
+Each token maps to an operation:
+
+- `"set"`  → `+1`
+- `"sets"` → `×2`
+
+| Token sequence   | Computation            | Value |
+|------------------|------------------------|-------|
+| `sets`           | 0→×2                   | 0     |
+| `set`            | 0→+1                   | 1     |
+| `set sets`       | 0→+1=1→×2             | 2     |
+| `set set`        | 0→+1=1→+1             | 2     |
+| `set sets sets`  | 0→+1=1→×2=2→×2       | 4     |
+| `set sets set`   | 0→+1=1→×2=2→+1       | 3     |
 
 ## Evaluation model
 
@@ -230,7 +249,7 @@ Set set Set's sets Sets set sets' set sets set Set's sets  -- U = U \ C[2]
 
 Tokens: `Sets` `set` `sets'` `set` `sets` `set`
 
-After `Sets set sets'`: start integer parsing. `set` = bit 1 → value=1. Next is `sets` = bit 0 → value=2. Next is `set` — bounded lookahead: after this `set` would `"Set's"` or `"Sets"` follow? Next token is `Set's sets` (D address). So `Set's` follows → yes, address follows → stop at the `set` without consuming. Return integer = 2.
+After `Sets set sets'`: start integer parsing. `set` = +1 → value=1. Next is `sets` = ×2 → value=2. Next is `set` — bounded lookahead: after this `set` would `"Set's"` or `"Sets"` follow? Next token is `Set's sets` (D address). So `Set's` follows → yes, address follows → stop at the `set` without consuming. Return integer = 2.
 
 B = C[2]. C has length 2 (indices 0,1) → runtime error: "out of bounds".
 
@@ -264,51 +283,46 @@ U = U ∪ {{∅}} produces a set with 3 elements.
 
 ## Computing 42
 
-Program that grows U to size 42. The first instruction seeds C = {∅}, then
-each subsequent instruction doubles U (U ∪ U) or increments by one (U ∪ C[0]):
+A set whose value is 42, built via the mixed-unary scheme. Each
+step applies the next element's operation to the running total:
 
-| Instr | Op          | Size of U after |
-|-------|-------------|-----------------|
-| 1     | C = U ∩ U   | 1 (unchanged)   |
-| 2     | U = U ∪ U   | 2                |
-| 3     | U = U ∪ U   | 4                |
-| 4     | U = U ∪ C[0] | 5               |
-| 5     | U = U ∪ U   | 10               |
-| 6     | U = U ∪ U   | 20               |
-| 7     | U = U ∪ C[0] | 21              |
-| 8     | U = U ∪ U   | 42               |
+| Step | Element             | Operation | Running total |
+|------|---------------------|-----------|---------------|
+| 1    | ∅ (empty set)       | +1        | 1             |
+| 2    | {∅} (nonempty)      | ×2        | 2             |
+| 3    | {∅} (nonempty)      | ×2        | 4             |
+| 4    | ∅ (empty set)       | +1        | 5             |
+| 5    | {∅} (nonempty)      | ×2        | 10            |
+| 6    | {∅} (nonempty)      | ×2        | 20            |
+| 7    | ∅ (empty set)       | +1        | 21            |
+| 8    | {∅} (nonempty)      | ×2        | 42            |
 
-```
-Set Set's Set's sets Set's sets set Set's set
-Set sets Set's sets Set's sets set Set's sets
-Set sets Set's sets Set's sets set Set's sets
-Set sets Set's sets Set's set set Set's sets
-Set sets Set's sets Set's sets set Set's sets
-Set sets Set's sets Set's sets set Set's sets
-Set sets Set's sets Set's set set Set's sets
-Set sets Set's sets Set's sets set Set's sets
-```
-
-### Trace of instruction 4 (increment by one)
+The corresponding set:
 
 ```
-Set sets Set's sets Set's set set Set's sets
-│   │    │      │   │      │   │   │      │
-│   │    │      │   │      │   │   └──────┴── D = U
-│   │    │      │   │      │   └───── separator
-│   │    │      │   └──────┴───────── B = C (Set's set)
-│   │    └──────┴──────────────────── A = U (Set's sets)
-│   └──────────────────────────────── opcode = "sets" (union)
-└──────────────────────────────────── instruction start
+{∅, {∅}, {∅}, ∅, {∅}, {∅}, ∅, {∅}}
 ```
 
+And the equivalent token sequence (as used in addresses):
+
 ```
-resolve(A)=U={∅,∅,∅,∅} (size 4)
-resolve(B)=C={∅}         (size 1)
-result = U ∪ C = 4 ∪ 1 = 5 elements
-assign(D=U): U has size 5
+set sets sets set sets sets set sets
 ```
 
-Binary pattern for 42: `101010` = (1×2+0)×2+1... The actual sequence
-is: 1, 2, 4, 5, 10, 20, 21, 42. This is: ×2, ×2, +1, ×2, ×2, +1, ×2.
-42 = ((((1×2)×2+1)×2)×2+1)×2 = 42.
+Tracing the full computation:
+
+```
+r = 0
+r →+1  = 1    (∅ / set)
+r →×2  = 2    ({∅} / sets)
+r →×2  = 4    ({∅} / sets)
+r →+1  = 5    (∅ / set)
+r →×2  = 10   ({∅} / sets)
+r →×2  = 20   ({∅} / sets)
+r →+1  = 21   (∅ / set)
+r →×2  = 42   ({∅} / sets)
+```
+
+The mixed-unary encoding of 42 uses the same +1/×2 pattern
+as the binary representation `101010`, but with +1 applied where
+the binary bit is 1 and ×2 where it is 0.

@@ -2,7 +2,7 @@ import subprocess
 import sys
 from pathlib import Path
 import pytest
-from s5 import tokenize, Parser, Executor, SubroutineSet, LineSet
+from s5 import tokenize, Parser, Executor, SubroutineSet, LineSet, set_value, S5Set
 
 HERE = Path(__file__).parent
 ROOT = HERE.parent
@@ -108,23 +108,87 @@ def test_empty_c_intersect():
     assert out in ("halted", "finished")
 
 
-def test_compute_42():
+def test_set_value_empty():
+    assert set_value(S5Set()) == 0
+
+
+def test_set_value_singleton_empty():
+    assert set_value(S5Set([S5Set()])) == 1
+
+
+def test_set_value_singleton_nonempty():
+    assert set_value(S5Set([S5Set([S5Set()])])) == 0
+
+
+def test_set_value_42():
+    empty = S5Set()
+    nonempty = S5Set([empty])
+    s = S5Set([empty, nonempty, nonempty, empty,
+               nonempty, nonempty, empty, nonempty])
+    assert set_value(s) == 42
+
+
+def test_s5_compute_42():
     src = (
         "Set Set's Set's sets Set's sets set Set's set\n"
-        "Set sets Set's sets Set's sets set Set's sets\n"
-        "Set sets Set's sets Set's sets set Set's sets\n"
+        "Set sets Set's sets Sets sets' Set's set set Set's sets\n"
+        "Set sets Set's sets Sets sets' Set's set set Set's sets\n"
         "Set sets Set's sets Set's set set Set's sets\n"
-        "Set sets Set's sets Set's sets set Set's sets\n"
-        "Set sets Set's sets Set's sets set Set's sets\n"
+        "Set sets Set's sets Sets sets' Set's set set Set's sets\n"
+        "Set sets Set's sets Sets sets' Set's set set Set's sets\n"
         "Set sets Set's sets Set's set set Set's sets\n"
-        "Set sets Set's sets Set's sets set Set's sets"
+        "Set sets Set's sets Sets sets' Set's set set Set's sets"
     )
     tokens = tokenize(src)
     parser = Parser(tokens)
     executor = Executor()
     status = executor.run(parser.parse_program())
     assert status == "finished"
-    assert len(executor.U) == 42
+    assert set_value(executor.U) == 42
+
+
+def test_s5_compute_42_subr():
+    src = (
+        "Set sets Set's sets Set's sets set Set's set\n"
+        "Sets' Sets' Sets set sets' set\n"
+        "  Set sets Set's sets Sets sets' Sets sets' Sets set sets' sets set Set's sets\n"
+        "  Set sets Set's sets Sets sets' Sets sets' Sets set sets' sets set Set's sets\n"
+        "  Set sets Set's sets Sets sets' Sets set sets' sets set Set's sets\n"
+        "  Set sets Set's sets Sets sets' Sets sets' Sets set sets' sets set Set's sets\n"
+        "  Set sets Set's sets Sets sets' Sets sets' Sets set sets' sets set Set's sets\n"
+        "  Set sets Set's sets Sets sets' Sets set sets' sets set Set's sets\n"
+        "  Set sets Set's sets Sets sets' Sets sets' Sets set sets' sets set Set's sets\n"
+        "Sets'\n"
+        "Set Sets' Sets set sets' set"
+    )
+    tokens = tokenize(src)
+    parser = Parser(tokens)
+    executor = Executor()
+    status = executor.run(parser.parse_program())
+    assert status == "finished"
+    assert set_value(executor.U) == 42
+
+
+def test_s5_compute_42_subr_oneline():
+    src = " ".join(line.strip() for line in [
+        "Set sets Set's sets Set's sets set Set's set",
+        "Sets' Sets' Sets set sets' set",
+        "  Set sets Set's sets Sets sets' Sets sets' Sets set sets' sets set Set's sets",
+        "  Set sets Set's sets Sets sets' Sets sets' Sets set sets' sets set Set's sets",
+        "  Set sets Set's sets Sets sets' Sets set sets' sets set Set's sets",
+        "  Set sets Set's sets Sets sets' Sets sets' Sets set sets' sets set Set's sets",
+        "  Set sets Set's sets Sets sets' Sets sets' Sets set sets' sets set Set's sets",
+        "  Set sets Set's sets Sets sets' Sets set sets' sets set Set's sets",
+        "  Set sets Set's sets Sets sets' Sets sets' Sets set sets' sets set Set's sets",
+        "Sets'",
+        "Set Sets' Sets set sets' set",
+    ])
+    tokens = tokenize(src)
+    parser = Parser(tokens)
+    executor = Executor()
+    status = executor.run(parser.parse_program())
+    assert status == "finished"
+    assert set_value(executor.U) == 42
 
 
 def run_src(src):
@@ -223,21 +287,9 @@ class TestSubr:
         out, err, rc = run("Set Sets'")
         assert "C is undefined" in err
 
-    def test_subr_compute_42_golfed(self):
-        src = (
-            "Set sets Set's sets Set's sets set Set's set\n"
-            "Sets' Sets' Sets set sets' set\n"
-            "  Set sets Set's sets Set's sets set Set's sets\n"
-            "  Set sets Set's sets Set's sets set Set's sets\n"
-            "  Set sets Set's sets Sets sets' Sets set sets' sets set Set's sets\n"
-            "Sets'\n"
-            "Set Sets' Sets set sets' set\n"
-            "Set Sets' Sets set sets' set\n"
-            "Set sets Set's sets Set's sets set Set's sets"
-        )
-        tokens = tokenize(src)
-        parser = Parser(tokens)
-        executor = Executor()
-        status = executor.run(parser.parse_program())
-        assert status == "finished"
-        assert len(executor.U) == 42
+    def test_subr_set_value_42(self):
+        empty = S5Set()
+        nonempty = S5Set([empty])
+        s = S5Set([empty, nonempty, nonempty, empty,
+                   nonempty, nonempty, empty, nonempty])
+        assert set_value(s) == 42
