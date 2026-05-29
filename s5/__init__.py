@@ -178,6 +178,13 @@ class Parser:
             return Instruction(opcode, n=n)
         elif opcode == Opcode.SUBR:
             t = self.peek()
+            if t == TokenType.SINGULAR_LOWER:
+                self.consume()
+                cond = self.parse_address()
+                subr_addr = None
+                if self.peek() in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP):
+                    subr_addr = self.parse_address()
+                return Instruction(opcode, addr_a=subr_addr, addr_b=cond)
             loc = None
             if t in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP):
                 loc = self.parse_address()
@@ -419,6 +426,10 @@ class Executor:
                 self.assign(instr.addr_a, subroutine)
             self._check_halt()
         elif instr.opcode == Opcode.SUBR:
+            if instr.addr_b is not None:
+                cond_val = self.resolve(instr.addr_b)
+                if len(cond_val) == 0:
+                    return
             if instr.addr_a is None:
                 if self.C is None:
                     raise RuntimeError_("C is undefined")

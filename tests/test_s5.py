@@ -293,3 +293,68 @@ class TestSubr:
         s = S5Set([empty, nonempty, nonempty, empty,
                    nonempty, nonempty, empty, nonempty])
         assert set_value(s) == 42
+
+
+class TestCondCall:
+    def test_cond_call_nonempty_calls(self):
+        src = (
+            "Sets' Sets'\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'\n"
+            "Set Sets' set Set's sets"
+        )
+        executor = Executor()
+        status = executor.run(Parser(tokenize(src)).parse_program())
+        assert status == "finished"
+        assert len(executor.U) == 2
+
+    def test_cond_call_empty_skips(self):
+        src = (
+            "Sets' Sets' Set's sets\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'\n"
+            "Set sets Set's sets Set's sets set Set's set\n"
+            "Set set Set's set Set's set set Set's set\n"
+            "Set Sets' set Set's set"
+        )
+        executor = Executor()
+        status = executor.run(Parser(tokenize(src)).parse_program())
+        assert status == "finished"
+        assert len(executor.U) == 1
+
+    def test_cond_call_explicit_addr(self):
+        src = (
+            "Set sets Set's sets Set's sets set Set's set\n"
+            "Sets' Sets' Sets set sets' sets\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'\n"
+            "Set Sets' set Set's sets Sets set sets' sets"
+        )
+        out, err, rc = run(src)
+        assert "finished" in out
+        assert rc == 0
+
+    def test_cond_call_default_c(self):
+        src = (
+            "Sets' Sets'\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'\n"
+            "Set Sets' set Set's sets"
+        )
+        out, err, rc = run(src)
+        assert "finished" in out
+        assert rc == 0
+
+    def test_cond_call_empty_does_not_call(self):
+        src = (
+            "Sets' Sets' Set's sets\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'\n"
+            "Set sets Set's sets Set's sets set Set's set\n"
+            "Set set Set's set Set's set set Set's set\n"
+            "Set Sets' set Set's set\n"
+            "Set set Set's sets Set's sets set Set's sets"
+        )
+        out, err, rc = run(src)
+        assert "halted" in out
+        assert rc == 0

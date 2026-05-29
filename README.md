@@ -12,7 +12,8 @@ Every token is a form of `"set"`. All computation is over ordered sets of sets. 
 | `Set's`   | intersection opcode / base-address prefix   |
 | `sets'`   | integer suffix / subset-select suffix       |
 | `Sets`    | derived-address / wrap-address / subset-select opcode prefix |
-| `Sets'`   | declaration / end                           |
+| `Sets'`   | declaration / end / subroutine delimiter    |
+| `set's'`  | I/O address                                 |
 
 ## Initial state
 
@@ -33,17 +34,23 @@ H = false      Halted: set when len(U) reaches 0 after an instruction
                    | "sets"               -- union
                    | "Set's"              -- intersection
                    | "set"                -- difference
+                   | "Sets'"              -- subroutine call
 
 <operands>       ::= <subset_operands>
                    | <binary_operands>
+                   | <subr_operands>
 
 <subset_operands> ::= "sets'" <integer>
 
 <binary_operands> ::= <address> <address> "set" <address>
 
+<subr_operands>   ::= [<address>]
+                   | "set" <address> [<address>]
+
 <address>        ::= <base_addr>
                    | <derived_addr>
                    | <wrap_addr>
+                   | <io_addr>
 
 <base_addr>      ::= "Set's" "sets"       -- Universe U
                    | "Set's" "set"        -- Cache C
@@ -51,6 +58,8 @@ H = false      Halted: set when len(U) reaches 0 after an instruction
 <derived_addr>   ::= "Sets" "set" "sets'" <integer>
 
 <wrap_addr>      ::= "Sets" "sets'" <address>
+
+<io_addr>        ::= "set's'"             -- I/O
 
 <integer>        ::= ("set" | "sets")*    -- mixed-unary: set=+1, sets=×2
 ```
@@ -103,12 +112,14 @@ Each token maps to an operation:
 
 ## Evaluation model
 
+### Instructions
+
 ```
 for each instruction:
     1. parse          — "Set" <opcode> <operands>
     2. resolve(A, B)  — addresses → S5Set values
     3. compute        — A <op> B  (union / intersection / difference)
-    4. assign(D)      — result → destination address (WRAP rejected)
+    4. assign(D)      — result → destination address (WRAP/IO rejected as dest)
     5. halt check     — if len(U) == 0: H = true, stop
 ```
 
@@ -117,6 +128,26 @@ for each instruction:
 - **Intersection** (`"Set's"`): elements of A that also appear in B (preserves A order).
 - **Difference** (`"set"`): elements of A not in B (preserves A order).
 - **Wrap** (`"Sets sets'"`): wraps the resolved inner address into a singleton set `{value}`. Read-only — cannot be used as destination.
+- **I/O** (`"set's'"`): in A/B position, reads an integer from stdin and converts it to an S5Set; in D position, prints the set's numerical value to stdout. Cannot be used as destination for wrap.
+- **Subroutine call** (`"Set" "Sets'"`): executes the subroutine stored at the given address (or C if omitted). Subroutine values are created via definition (see below).
+- **Conditional call** (`"Set" "Sets'" "set" <cond> [<subr>]`): resolves `cond`. If non-empty, resolves `subr` (defaults to C) and calls the subroutine. If empty (`∅`), the instruction is a no-op. This is the only branching mechanism — use difference with itself to produce an empty condition, or union with a non-empty set to ensure a call.
+
+### Subroutine definitions
+
+A subroutine definition is a top-level construct (not an instruction):
+
+```
+<definition>     ::= "Sets'" "Sets'" [<address>] <instruction>+ "Sets'"
+```
+
+It creates a `SubroutineSet` whose elements are `LineSet` wrappers around each instruction's tokens. The subroutine is assigned to the given address (or C if omitted). This enables first-class subroutines that can be stored, passed around, and called.
+
+```
+Sets' Sets' Set's sets       -- assign to U
+    Set sets Set's sets Set's sets set Set's set
+    Set set Set's sets Set's set set Set's sets
+Sets'
+```
 
 ## Simple cases
 See [tests](tests) for more cases.
@@ -280,6 +311,85 @@ B = `Sets sets'`(wrap) `Sets set sets' set`(derived addr C[1]) → `{C[1]}`.
 
 If C = {∅, {∅}} beforehand, then C[1] = {∅}, and B = {{∅}}.
 U = U ∪ {{∅}} produces a set with 3 elements.
+
+### I/O: output and input
+
+Output the value of U ∪ U (which has value 2) to stdout:
+
+```
+Set sets Set's sets Set's sets set set's'
+```
+
+| Token        | Role               |
+|--------------|--------------------|
+| `Set`        | instruction start  |
+| `sets`       | union opcode       |
+| `Set's sets` | A = U              |
+| `Set's sets` | B = U              |
+| `set`        | separator          |
+| `set's'`     | D = output         |
+
+```
+resolve(A) = U = {∅}
+resolve(B) = U = {∅}
+result = {∅} ∪ {∅} = {∅, ∅}
+assign(D=set's'): prints "2" (set_value = 2)
+```
+
+Read an integer from stdin and make it the new value of C:
+
+```
+Set sets set's' Set's sets set Set's set
+```
+
+| Token        | Role               |
+|--------------|--------------------|
+| `Set`        | instruction start  |
+| `sets`       | union opcode       |
+| `set's'`     | A = stdin → S5Set  |
+| `Set's sets` | B = U              |
+| `set`        | separator          |
+| `Set's set`  | D = C              |
+
+Input `7\n` → `int_to_s5set(7)` = `{∅, {∅}, ∅, {∅}, ∅, {∅}, ∅}`.
+C = input ∪ U = 7-element set prepended to {∅}.
+
+### Subroutine: define, store, and call
+
+Define a subroutine in C that unions U with itself, then call it:
+
+```
+Sets' Sets'
+    Set sets Set's sets Set's sets set Set's set
+Sets'
+Set Sets'
+```
+
+First line: `Sets' Sets'` begins definition, subroutine body is `Set sets Set's sets Set's sets set Set's set`, then `Sets'` ends definition. The subroutine is stored in C.
+
+`Set Sets'` calls the subroutine in C (no address → defaults to C), which executes the body, doubling U.
+
+### Conditional call
+
+Define a subroutine that doubles U, then call it only if U is non-empty:
+
+```
+Sets' Sets'
+    Set sets Set's sets Set's sets set Set's sets
+Sets'
+Set Sets' set Set's sets
+```
+
+The condition is `Set's sets` (U). Since U starts as `{∅}` (non-empty), the call executes, doubling U to `{∅, ∅}`.
+
+To skip the call, produce an empty condition via difference:
+
+```
+Set set Set's sets Set's sets set Set's sets   -- U = U \ U = {}
+Set Sets' set Set's sets                        -- condition is {} → skip
+```
+
+The first instruction empties U. The second instruction's condition resolves to `∅`, so the subroutine is never called. The program halts immediately after (since `len(U) == 0`).
 
 ## Computing 42
 
