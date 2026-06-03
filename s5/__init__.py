@@ -38,6 +38,7 @@ class AddressType:
     DERIVED = 'DERIVED'
     WRAP = 'WRAP'
     IO = 'IO'
+    IO_BYTE = 'IO_BYTE'
 
 
 class Address:
@@ -223,6 +224,14 @@ class Parser:
                 return Address(AddressType.DERIVED, index=n)
             else:
                 raise SyntaxError_(f"expected 'set' or 'sets'' after 'Sets', got {t2}")
+        elif t == TokenType.PLURAL_LOWER:
+            self.consume()
+            if self.peek() == TokenType.SINGULAR_LOWER_APOS_APOS:
+                self.consume()
+                return Address(AddressType.IO_BYTE)
+            raise SyntaxError_(
+                f"expected set's' after sets, got "
+                f"{TOKEN_DISPLAY.get(self.peek(), self.peek())}")
         elif t == TokenType.SINGULAR_LOWER_APOS_APOS:
             self.consume()
             return Address(AddressType.IO)
@@ -372,6 +381,11 @@ class Executor:
         elif addr.type == AddressType.WRAP:
             inner = self.resolve(addr.sub_addr)
             return S5Set([inner])
+        elif addr.type == AddressType.IO_BYTE:
+            byte = sys.stdin.buffer.read(1)
+            if not byte:
+                raise RuntimeError_("input: unexpected EOF")
+            return int_to_s5set(byte[0])
         elif addr.type == AddressType.IO:
             line = sys.stdin.readline()
             if not line:
@@ -386,7 +400,15 @@ class Executor:
     def assign(self, addr, value):
         if addr.type == AddressType.WRAP:
             raise RuntimeError_("cannot assign to a wrap address")
-        if addr.type == AddressType.IO:
+        if addr.type == AddressType.IO_BYTE:
+            n = set_value(value)
+            while True:
+                sys.stdout.buffer.write(bytes([n & 0xFF]))
+                n >>= 8
+                if n == 0:
+                    break
+            sys.stdout.buffer.flush()
+        elif addr.type == AddressType.IO:
             n = set_value(value)
             print(n)
         elif addr.type == AddressType.U:

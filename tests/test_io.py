@@ -3,7 +3,8 @@ import subprocess
 import io
 from pathlib import Path
 import pytest
-from s5 import tokenize, Parser, Executor, int_to_s5set, set_value, S5Set, TokenType, Address, AddressType
+from s5 import (tokenize, Parser, Executor, int_to_s5set, set_value, S5Set,
+                TokenType, Address, AddressType)
 
 HERE = Path(__file__).parent
 ROOT = HERE.parent
@@ -109,6 +110,107 @@ class TestIOIntegration:
             out_lines = p.stdout.strip().splitlines()
             assert p.returncode == 0
             assert "finished" in out_lines
+        finally:
+            if prog_file.exists():
+                prog_file.unlink()
+
+
+class TestByteIO:
+    def test_tokenize(self):
+        tokens = tokenize("sets set's'")
+        assert tokens == [TokenType.PLURAL_LOWER, TokenType.SINGULAR_LOWER_APOS_APOS]
+
+    def test_parse_address(self):
+        parser = Parser([TokenType.PLURAL_LOWER, TokenType.SINGULAR_LOWER_APOS_APOS])
+        addr = parser.parse_address()
+        assert addr.type == AddressType.IO_BYTE
+
+    def test_parse_address_rejected_no_io(self):
+        parser = Parser([TokenType.PLURAL_LOWER])
+        with pytest.raises(Exception):
+            parser.parse_address()
+
+    def test_resolve_input(self):
+        executor = Executor()
+        addr = Address(AddressType.IO_BYTE)
+        old_in = sys.stdin
+        try:
+            sys.stdin = io.TextIOWrapper(io.BytesIO(b'\x2A'), encoding='latin-1')
+            result = executor.resolve(addr)
+        finally:
+            sys.stdin = old_in
+        assert set_value(result) == 42
+
+    def test_assign_output_single_byte(self):
+        executor = Executor()
+        addr = Address(AddressType.IO_BYTE)
+        value = int_to_s5set(42)
+        buf = io.BytesIO()
+        old_out = sys.stdout
+        try:
+            sys.stdout = io.TextIOWrapper(buf, encoding='latin-1')
+            executor.assign(addr, value)
+            sys.stdout.flush()
+            result = buf.getvalue()
+        finally:
+            sys.stdout = old_out
+        assert result == b'\x2A'
+
+    def test_assign_output_multi_byte(self):
+        executor = Executor()
+        addr = Address(AddressType.IO_BYTE)
+        value = int_to_s5set(256)
+        buf = io.BytesIO()
+        old_out = sys.stdout
+        try:
+            sys.stdout = io.TextIOWrapper(buf, encoding='latin-1')
+            executor.assign(addr, value)
+            sys.stdout.flush()
+            result = buf.getvalue()
+        finally:
+            sys.stdout = old_out
+        assert result == b'\x00\x01'
+
+    def test_assign_output_zero(self):
+        executor = Executor()
+        addr = Address(AddressType.IO_BYTE)
+        value = int_to_s5set(0)
+        buf = io.BytesIO()
+        old_out = sys.stdout
+        try:
+            sys.stdout = io.TextIOWrapper(buf, encoding='latin-1')
+            executor.assign(addr, value)
+            sys.stdout.flush()
+            result = buf.getvalue()
+        finally:
+            sys.stdout = old_out
+        assert result == b'\x00'
+
+    def test_assign_output_large(self):
+        executor = Executor()
+        addr = Address(AddressType.IO_BYTE)
+        value = int_to_s5set(0x01020304)
+        buf = io.BytesIO()
+        old_out = sys.stdout
+        try:
+            sys.stdout = io.TextIOWrapper(buf, encoding='latin-1')
+            executor.assign(addr, value)
+            sys.stdout.flush()
+            result = buf.getvalue()
+        finally:
+            sys.stdout = old_out
+        assert result == b'\x04\x03\x02\x01'
+
+    def test_byte_output_via_file_mode(self):
+        program = "Set sets Set's sets Set's sets set sets set's'"
+        prog_file = ROOT / "_test_byte_output.s5"
+        try:
+            prog_file.write_text(program, encoding="utf-8")
+            p = subprocess.run(
+                [sys.executable, "-m", "s5", str(prog_file)],
+                capture_output=True, cwd=str(ROOT))
+            assert p.returncode == 0
+            assert b'\x02' in p.stdout
         finally:
             if prog_file.exists():
                 prog_file.unlink()

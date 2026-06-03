@@ -13,7 +13,8 @@ Every token is a form of `"set"`. All computation is over ordered sets of sets. 
 | `sets'`   | integer suffix / subset-select suffix       |
 | `Sets`    | derived-address / wrap-address / subset-select opcode prefix |
 | `Sets'`   | declaration / end / subroutine delimiter    |
-| `set's'`  | I/O address                                 |
+| `set's'`  | integer I/O address                          |
+| `sets set's'` | byte I/O address (2 tokens)                |
 
 ## Initial state
 
@@ -51,6 +52,7 @@ H = false      Halted: set when len(U) reaches 0 after an instruction
                    | <derived_addr>
                    | <wrap_addr>
                    | <io_addr>
+                   | <byte_io_addr>
 
 <base_addr>      ::= "Set's" "sets"       -- Universe U
                    | "Set's" "set"        -- Cache C
@@ -59,7 +61,8 @@ H = false      Halted: set when len(U) reaches 0 after an instruction
 
 <wrap_addr>      ::= "Sets" "sets'" <address>
 
-<io_addr>        ::= "set's'"             -- I/O
+<io_addr>        ::= "set's'"             -- integer I/O
+<byte_io_addr>   ::= "sets" "set's'"      -- byte I/O
 
 <integer>        ::= ("set" | "sets")*    -- mixed-unary: set=+1, sets=×2
 ```
@@ -128,7 +131,8 @@ for each instruction:
 - **Intersection** (`"Set's"`): elements of A that also appear in B (preserves A order).
 - **Difference** (`"set"`): elements of A not in B (preserves A order).
 - **Wrap** (`"Sets sets'"`): wraps the resolved inner address into a singleton set `{value}`. Read-only — cannot be used as destination.
-- **I/O** (`"set's'"`): in A/B position, reads an integer from stdin and converts it to an S5Set; in D position, prints the set's numerical value to stdout. Cannot be used as destination for wrap.
+- **Integer I/O** (`"set's'"`): in A/B position, reads a decimal integer line from stdin and converts it to an S5Set; in D position, prints the set's numerical value as a decimal string to stdout.
+- **Byte I/O** (`"sets" "set's'"`): in A/B position, reads a single raw byte (0–255) from stdin; in D position, writes the set's numerical value as one or more little-endian raw bytes to stdout (divides by 256 until zero, always emits at least one byte).
 - **Subroutine call** (`"Set" "Sets'"`): executes the subroutine stored at the given address (or C if omitted). Subroutine values are created via definition (see below).
 - **Conditional call** (`"Set" "Sets'" "set" <cond> [<subr>]`): resolves `cond`. If non-empty, resolves `subr` (defaults to C) and calls the subroutine. If empty (`∅`), the instruction is a no-op. This is the only branching mechanism — use difference with itself to produce an empty condition, or union with a non-empty set to ensure a call.
 
@@ -353,6 +357,52 @@ Set sets set's' Set's sets set Set's set
 
 Input `7\n` → `int_to_s5set(7)` = `{∅, {∅}, ∅, {∅}, ∅, {∅}, ∅}`.
 C = input ∪ U = 7-element set prepended to {∅}.
+
+### Byte I/O: raw byte input and output
+
+Output the value 2 as a raw byte (0x02) to stdout:
+
+```
+Set sets Set's sets Set's sets set sets set's'
+```
+
+| Token          | Role               |
+|----------------|--------------------|
+| `Set`          | instruction start  |
+| `sets`         | union opcode       |
+| `Set's sets`   | A = U              |
+| `Set's sets`   | B = U              |
+| `set`          | separator          |
+| `sets set's'`  | D = byte output    |
+
+```
+resolve(A) = U = {∅}
+resolve(B) = U = {∅}
+result = {∅} ∪ {∅} = {∅, ∅}
+set_value({∅, ∅}) = 2
+assign(D=sets set's'): writes b'\x02'
+```
+
+Read a single raw byte from stdin and store it in C:
+
+```
+Set sets sets set's' Set's sets set Set's set
+```
+
+| Token          | Role               |
+|----------------|--------------------|
+| `Set`          | instruction start  |
+| `sets`         | union opcode       |
+| `sets set's'`  | A = byte stdin     |
+| `Set's sets`   | B = U              |
+| `set`          | separator          |
+| `Set's set`    | D = C              |
+
+Input `\x2A` → `int_to_s5set(42)` = `{∅, {∅}, ∅, {∅}, ∅, {∅}, ∅}`.
+C = input ∪ U = 7-element set prepended to {∅}.
+
+Multi-byte output uses little-endian division: a set with value 256 emits `\x00\x01`,
+value 0 emits `\x00`.
 
 ### Subroutine: define, store, and call
 
