@@ -2,14 +2,14 @@ import sys
 
 
 class TokenType:
-    SINGULAR = 'SINGULAR'
-    SINGULAR_LOWER = 'SINGULAR_LOWER'
-    PLURAL_LOWER = 'PLURAL_LOWER'
-    SINGULAR_APOS = 'SINGULAR_APOS'
-    PLURAL_APOS = 'PLURAL_APOS'
-    PLURAL_CAP = 'PLURAL_CAP'
-    PLURAL_CAP_APOS = 'PLURAL_CAP_APOS'
-    SINGULAR_LOWER_APOS_APOS = 'SINGULAR_LOWER_APOS_APOS'
+    SINGULAR = "SINGULAR"
+    SINGULAR_LOWER = "SINGULAR_LOWER"
+    PLURAL_LOWER = "PLURAL_LOWER"
+    SINGULAR_APOS = "SINGULAR_APOS"
+    PLURAL_APOS = "PLURAL_APOS"
+    PLURAL_CAP = "PLURAL_CAP"
+    PLURAL_CAP_APOS = "PLURAL_CAP_APOS"
+    SINGULAR_LOWER_APOS_APOS = "SINGULAR_LOWER_APOS_APOS"
 
 
 TOKEN_DISPLAY = {
@@ -25,24 +25,25 @@ TOKEN_DISPLAY = {
 
 
 class Opcode:
-    SUBSET_SELECT = 'SUBSET_SELECT'
-    UNION = 'UNION'
-    INTERSECTION = 'INTERSECTION'
-    DIFFERENCE = 'DIFFERENCE'
-    SUBR = 'SUBR'
+    SUBSET_SELECT = "SUBSET_SELECT"
+    UNION = "UNION"
+    INTERSECTION = "INTERSECTION"
+    DIFFERENCE = "DIFFERENCE"
+    SUBR = "SUBR"
 
 
 class AddressType:
-    U = 'U'
-    C = 'C'
-    DERIVED = 'DERIVED'
-    WRAP = 'WRAP'
-    IO = 'IO'
-    IO_BYTE = 'IO_BYTE'
+    U = "U"
+    C = "C"
+    DERIVED = "DERIVED"
+    WRAP = "WRAP"
+    IO = "IO"
+    IO_BYTE = "IO_BYTE"
 
 
 class Address:
-    __slots__ = ('type', 'index', 'sub_addr')
+    __slots__ = ("type", "index", "sub_addr")
+
     def __init__(self, addr_type, index=None, sub_addr=None):
         self.type = addr_type
         self.index = index
@@ -50,8 +51,11 @@ class Address:
 
 
 class Instruction:
-    __slots__ = ('opcode', 'n', 'addr_a', 'addr_b', 'addr_dest', 'subr_body')
-    def __init__(self, opcode, n=None, addr_a=None, addr_b=None, addr_dest=None, subr_body=None):
+    __slots__ = ("opcode", "n", "addr_a", "addr_b", "addr_dest", "subr_body")
+
+    def __init__(
+        self, opcode, n=None, addr_a=None, addr_b=None, addr_dest=None, subr_body=None
+    ):
         self.opcode = opcode
         self.n = n
         self.addr_a = addr_a
@@ -75,17 +79,17 @@ class RuntimeError_(Exception):
 def tokenize(source):
     tokens = []
     for word in source.split():
-        if word == 'Set':
+        if word == "Set":
             tokens.append(TokenType.SINGULAR)
-        elif word == 'set':
+        elif word == "set":
             tokens.append(TokenType.SINGULAR_LOWER)
-        elif word == 'sets':
+        elif word == "sets":
             tokens.append(TokenType.PLURAL_LOWER)
         elif word == "Set's":
             tokens.append(TokenType.SINGULAR_APOS)
         elif word == "sets'":
             tokens.append(TokenType.PLURAL_APOS)
-        elif word == 'Sets':
+        elif word == "Sets":
             tokens.append(TokenType.PLURAL_CAP)
         elif word == "Sets'":
             tokens.append(TokenType.PLURAL_CAP_APOS)
@@ -101,10 +105,10 @@ class Parser:
         self.tokens = tokens
         self.pos = 0
 
-    def peek(self):
+    def peek(self) -> str | None:
         return self.tokens[self.pos] if self.pos < len(self.tokens) else None
 
-    def consume(self):
+    def consume(self) -> str:
         if self.pos >= len(self.tokens):
             raise SyntaxError_("unexpected end of input")
         t = self.tokens[self.pos]
@@ -137,7 +141,9 @@ class Parser:
                     if self.peek() != TokenType.PLURAL_CAP_APOS:
                         raise SyntaxError_("expected Sets' to end subroutine")
                     self.consume()
-                    instructions.append(Instruction(Opcode.SUBR, subr_body=body, addr_a=loc))
+                    instructions.append(
+                        Instruction(Opcode.SUBR, subr_body=body, addr_a=loc)
+                    )
                 else:
                     raise SyntaxError_("unexpected bare Sets'")
             else:
@@ -231,7 +237,8 @@ class Parser:
                 return Address(AddressType.IO_BYTE)
             raise SyntaxError_(
                 f"expected set's' after sets, got "
-                f"{TOKEN_DISPLAY.get(self.peek(), self.peek())}")
+                f"{TOKEN_DISPLAY.get(self.peek(), self.peek())}"
+            )
         elif t == TokenType.SINGULAR_LOWER_APOS_APOS:
             self.consume()
             return Address(AddressType.IO)
@@ -261,7 +268,7 @@ class Parser:
 
 
 class S5Set:
-    __slots__ = ('_items',)
+    __slots__ = ("_items",)
 
     def __init__(self, items=()):
         for item in items:
@@ -314,7 +321,7 @@ class S5Set:
 
 def set_value(s):
     """Numerical value of an ordered set under mixed-unary encoding.
-    
+
     Start from 0; for each element left-to-right:
       ∅ (empty set) → +1
       nonempty       → ×2
@@ -345,14 +352,16 @@ def int_to_s5set(n):
 
 
 class LineSet(S5Set):
-    __slots__ = ('_instruction',)
+    __slots__ = ("_instruction",)
+
     def __init__(self, instruction):
         super().__init__()
         self._instruction = instruction
 
 
 class SubroutineSet(S5Set):
-    __slots__ = ('_body',)
+    __slots__ = ("_body",)
+
     def __init__(self, body, items):
         super().__init__(items)
         self._body = body
@@ -376,7 +385,8 @@ class Executor:
                 raise RuntimeError_("C is undefined")
             if addr.index >= len(self.C):
                 raise RuntimeError_(
-                    f"C[{addr.index}] out of bounds (len={len(self.C)})")
+                    f"C[{addr.index}] out of bounds (len={len(self.C)})"
+                )
             return self.C[addr.index]
         elif addr.type == AddressType.WRAP:
             inner = self.resolve(addr.sub_addr)
@@ -393,8 +403,7 @@ class Executor:
             try:
                 n = int(line.strip())
             except ValueError:
-                raise RuntimeError_(
-                    f"input: expected integer, got {line.strip()!r}")
+                raise RuntimeError_(f"input: expected integer, got {line.strip()!r}")
             return int_to_s5set(n)
 
     def assign(self, addr, value):
@@ -420,7 +429,8 @@ class Executor:
                 raise RuntimeError_("C is undefined")
             if addr.index >= len(self.C):
                 raise RuntimeError_(
-                    f"C[{addr.index}] out of bounds (len={len(self.C)})")
+                    f"C[{addr.index}] out of bounds (len={len(self.C)})"
+                )
             items = list(self.C._items)
             items[addr.index] = value
             self.C = S5Set._from_items(items)
@@ -432,11 +442,9 @@ class Executor:
     def exec_instruction(self, instr):
         if instr.opcode == Opcode.SUBSET_SELECT:
             if self.C is None:
-                raise RuntimeError_(
-                    "cannot subset-select: C is undefined")
+                raise RuntimeError_("cannot subset-select: C is undefined")
             if instr.n >= len(self.C):
-                raise RuntimeError_(
-                    f"C[{instr.n}] out of bounds (len={len(self.C)})")
+                raise RuntimeError_(f"C[{instr.n}] out of bounds (len={len(self.C)})")
             self.C = self.C[instr.n]
             self._check_halt()
         elif instr.opcode == Opcode.SUBR and instr.subr_body is not None:
@@ -493,7 +501,7 @@ def main():
         sys.stderr = sys.stdout
 
     if len(sys.argv) > 1:
-        with open(sys.argv[1], encoding='utf-8-sig') as f:
+        with open(sys.argv[1], encoding="utf-8-sig") as f:
             source = f.read()
     else:
         source = sys.stdin.read()
