@@ -10,7 +10,7 @@ ROOT = HERE.parent
 
 def run(inp):
     p = subprocess.run(
-        [sys.executable, "-m", "s5"],
+        [sys.executable, "-m", "s5", "--repl"],
         input=inp, capture_output=True, text=True, cwd=str(ROOT))
     return p.stdout.strip(), p.stderr.strip(), p.returncode
 
@@ -79,22 +79,22 @@ def test_bounded_int_out_of_bounds():
         "Set set Set's sets Sets set sets' set sets set Set's sets"
     )
     out, err, rc = run(src)
-    assert "out of bounds" in err
+    assert "out of bounds" in out
 
 
 def test_c_undefined():
     out, err, rc = run("Set Sets set sets' sets")
-    assert "C is undefined" in err
+    assert "C is undefined" in out
 
 
 def test_bad_token():
     out, err, rc = run("foo")
-    assert "unknown token" in err
+    assert "unknown token" in out
 
 
 def test_incomplete_instr():
     out, err, rc = run("Set")
-    assert "end of input" in err
+    assert "end of input" in out
 
 
 def test_empty_c_intersect():
@@ -269,11 +269,11 @@ class TestSubr:
             "  Set sets Set's sets Set's sets set Set's sets\n"
         )
         out, err, rc = run(src)
-        assert "syntax error" in err
+        assert "syntax error" in out
 
     def test_subr_bare_sets_apos(self):
         out, err, rc = run("Sets'")
-        assert "syntax error" in err
+        assert "syntax error" in out
 
     def test_subr_invoke_not_subroutine(self):
         src = (
@@ -281,11 +281,11 @@ class TestSubr:
             "Set Sets'"
         )
         out, err, rc = run(src)
-        assert "not a subroutine" in err
+        assert "not a subroutine" in out
 
     def test_subr_invoke_undefined_c(self):
         out, err, rc = run("Set Sets'")
-        assert "C is undefined" in err
+        assert "C is undefined" in out
 
     def test_subr_set_value_42(self):
         empty = S5Set()

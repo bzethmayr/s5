@@ -18,7 +18,7 @@ ROOT = HERE.parent
 
 def run(inp):
     p = subprocess.run(
-        [sys.executable, "-m", "s5"],
+        [sys.executable, "-m", "s5", "--repl"],
         input=inp, capture_output=True, text=True, cwd=str(ROOT))
     return p.stdout.strip(), p.stderr.strip(), p.returncode
 
@@ -76,7 +76,7 @@ class TestExecutorAdversarial:
             "Set Sets set sets' set"
         )
         out, err, rc = run(src)
-        assert "out of bounds" in err
+        assert "out of bounds" in out
 
     def test_wrap_around_wrap(self):
         src = (
@@ -104,7 +104,7 @@ class TestIOAdversarial:
     def test_io_in_B_position(self):
         src = "Set sets Set's sets set's' set Set's sets"
         out, err, rc = self._run_with_stdin(src, "3\n")
-        assert "finished" in out
+        assert rc == 0
 
     def test_input_non_integer(self):
         src = "Set sets set's' Set's sets set Set's sets"
@@ -115,4 +115,4 @@ class TestIOAdversarial:
     def test_input_negative(self):
         src = "Set sets set's' Set's sets set Set's sets"
         out, err, rc = self._run_with_stdin(src, "-5\n")
-        assert "finished" in out
+        assert rc == 0
