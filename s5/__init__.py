@@ -36,6 +36,7 @@ class AddressType:
     U = "U"
     C = "C"
     DERIVED = "DERIVED"
+    UD = "UD"
     WRAP = "WRAP"
     IO = "IO"
     IO_BYTE = "IO_BYTE"
@@ -228,8 +229,13 @@ class Parser:
                 self.expect(TokenType.PLURAL_APOS)
                 n = self._parse_integer(bound_integer)
                 return Address(AddressType.DERIVED, index=n)
+            elif t2 == TokenType.PLURAL_LOWER:
+                self.consume()
+                self.expect(TokenType.PLURAL_APOS)
+                n = self._parse_integer(bound_integer)
+                return Address(AddressType.UD, index=n)
             else:
-                raise SyntaxError_(f"expected 'set' or 'sets'' after 'Sets', got {t2}")
+                raise SyntaxError_(f"expected 'set', 'sets', or 'sets'' after 'Sets', got {t2}")
         elif t == TokenType.PLURAL_LOWER:
             self.consume()
             if self.peek() == TokenType.SINGULAR_LOWER_APOS_APOS:
@@ -388,6 +394,12 @@ class Executor:
                     f"C[{addr.index}] out of bounds (len={len(self.C)})"
                 )
             return self.C[addr.index]
+        elif addr.type == AddressType.UD:
+            if addr.index >= len(self.U):
+                raise RuntimeError_(
+                    f"U[{addr.index}] out of bounds (len={len(self.U)})"
+                )
+            return self.U[addr.index]
         elif addr.type == AddressType.WRAP:
             inner = self.resolve(addr.sub_addr)
             return S5Set([inner])
@@ -434,6 +446,14 @@ class Executor:
             items = list(self.C._items)
             items[addr.index] = value
             self.C = S5Set._from_items(items)
+        elif addr.type == AddressType.UD:
+            if addr.index >= len(self.U):
+                raise RuntimeError_(
+                    f"U[{addr.index}] out of bounds (len={len(self.U)})"
+                )
+            items = list(self.U._items)
+            items[addr.index] = value
+            self.U = S5Set._from_items(items)
 
     def _check_halt(self):
         if len(self.U) == 0:
@@ -490,7 +510,10 @@ class Executor:
 
 
 def detect_mode():
-    if len(sys.argv) > 1:
+    if "--repl" in sys.argv:
+        return "repl"
+    args = [a for a in sys.argv if a != "--repl"]
+    if len(args) > 1:
         return "file"
     return "repl" if sys.stdin.isatty() else "piped"
 
@@ -500,8 +523,9 @@ def main():
     if mode == "repl":
         sys.stderr = sys.stdout
 
-    if len(sys.argv) > 1:
-        with open(sys.argv[1], encoding="utf-8-sig") as f:
+    file_args = [a for a in sys.argv[1:] if a != "--repl"]
+    if file_args:
+        with open(file_args[0], encoding="utf-8-sig") as f:
             source = f.read()
     else:
         source = sys.stdin.read()
@@ -522,7 +546,8 @@ def main():
     executor = Executor()
     try:
         status = executor.run(instructions)
-        print(status)
+        if mode == "repl":
+            print(status)
     except RuntimeError_ as e:
         print(f"runtime error: {e}", file=sys.stderr)
         sys.exit(1)

@@ -12,7 +12,7 @@ ROOT = HERE.parent
 
 def run(inp):
     p = subprocess.run(
-        [sys.executable, "-m", "s5"],
+        [sys.executable, "-m", "s5", "--repl"],
         input=inp, capture_output=True, text=True, cwd=str(ROOT))
     return p.stdout.strip(), p.stderr.strip(), p.returncode
 
@@ -107,12 +107,18 @@ class TestIOIntegration:
             p = subprocess.run(
                 [sys.executable, "-m", "s5", str(prog_file)],
                 input="7\n", capture_output=True, text=True, cwd=str(ROOT))
-            out_lines = p.stdout.strip().splitlines()
             assert p.returncode == 0
-            assert "finished" in out_lines
         finally:
             if prog_file.exists():
                 prog_file.unlink()
+
+    def test_hello_world_via_file_mode(self):
+        prog_file = ROOT / "hello_world.s5"
+        p = subprocess.run(
+            [sys.executable, "-m", "s5", str(prog_file)],
+            capture_output=True, text=True, cwd=str(ROOT))
+        assert p.returncode == 0
+        assert p.stdout == "Hello World!"
 
 
 class TestByteIO:

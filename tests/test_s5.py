@@ -2,7 +2,7 @@ import subprocess
 import sys
 from pathlib import Path
 import pytest
-from s5 import tokenize, Parser, Executor, SubroutineSet, LineSet, set_value, S5Set
+from s5 import tokenize, Parser, Executor, SubroutineSet, LineSet, set_value, S5Set, RuntimeError_
 
 HERE = Path(__file__).parent
 ROOT = HERE.parent
@@ -10,7 +10,7 @@ ROOT = HERE.parent
 
 def run(inp):
     p = subprocess.run(
-        [sys.executable, "-m", "s5"],
+        [sys.executable, "-m", "s5", "--repl"],
         input=inp, capture_output=True, text=True, cwd=str(ROOT))
     return p.stdout.strip(), p.stderr.strip(), p.returncode
 
@@ -79,22 +79,22 @@ def test_bounded_int_out_of_bounds():
         "Set set Set's sets Sets set sets' set sets set Set's sets"
     )
     out, err, rc = run(src)
-    assert "out of bounds" in err
+    assert "out of bounds" in out
 
 
 def test_c_undefined():
     out, err, rc = run("Set Sets set sets' sets")
-    assert "C is undefined" in err
+    assert "C is undefined" in out
 
 
 def test_bad_token():
     out, err, rc = run("foo")
-    assert "unknown token" in err
+    assert "unknown token" in out
 
 
 def test_incomplete_instr():
     out, err, rc = run("Set")
-    assert "end of input" in err
+    assert "end of input" in out
 
 
 def test_empty_c_intersect():
@@ -269,11 +269,11 @@ class TestSubr:
             "  Set sets Set's sets Set's sets set Set's sets\n"
         )
         out, err, rc = run(src)
-        assert "syntax error" in err
+        assert "syntax error" in out
 
     def test_subr_bare_sets_apos(self):
         out, err, rc = run("Sets'")
-        assert "syntax error" in err
+        assert "syntax error" in out
 
     def test_subr_invoke_not_subroutine(self):
         src = (
@@ -281,11 +281,11 @@ class TestSubr:
             "Set Sets'"
         )
         out, err, rc = run(src)
-        assert "not a subroutine" in err
+        assert "not a subroutine" in out
 
     def test_subr_invoke_undefined_c(self):
         out, err, rc = run("Set Sets'")
-        assert "C is undefined" in err
+        assert "C is undefined" in out
 
     def test_subr_set_value_42(self):
         empty = S5Set()
@@ -358,3 +358,42 @@ class TestCondCall:
         out, err, rc = run(src)
         assert "halted" in out
         assert rc == 0
+
+
+class TestUD:
+    def test_subr_define_at_u0_and_call(self):
+        src = (
+            "Sets' Sets' Sets sets sets'\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'\n"
+            "Set Sets' Sets sets sets'"
+        )
+        executor = Executor()
+        assert len(executor.U) == 1
+        status = executor.run(Parser(tokenize(src)).parse_program())
+        assert status == "finished"
+        assert len(executor.U) == 2
+
+    def test_subr_define_at_u0_store_type(self):
+        src = (
+            "Sets' Sets' Sets sets sets'\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'"
+        )
+        executor = Executor()
+        executor.run(Parser(tokenize(src)).parse_program())
+        assert isinstance(executor.U[0], SubroutineSet)
+
+    def test_ud_index_out_of_bounds_assign(self):
+        src = (
+            "Sets' Sets' Sets sets sets' set set\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'"
+        )
+        with pytest.raises(RuntimeError_, match="U\\[2\\] out of bounds"):
+            Executor().run(Parser(tokenize(src)).parse_program())
+
+    def test_ud_index_out_of_bounds_resolve(self):
+        src = "Set Sets' Sets sets sets' set set"
+        with pytest.raises(RuntimeError_, match="U\\[2\\] out of bounds"):
+            Executor().run(Parser(tokenize(src)).parse_program())

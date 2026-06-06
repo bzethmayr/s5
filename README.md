@@ -50,6 +50,7 @@ H = false      Halted: set when len(U) reaches 0 after an instruction
 
 <address>        ::= <base_addr>
                    | <derived_addr>
+                   | <ud_addr>
                    | <wrap_addr>
                    | <io_addr>
                    | <byte_io_addr>
@@ -58,6 +59,8 @@ H = false      Halted: set when len(U) reaches 0 after an instruction
                    | "Set's" "set"        -- Cache C
 
 <derived_addr>   ::= "Sets" "set" "sets'" <integer>
+
+<ud_addr>        ::= "Sets" "sets" "sets'" <integer>
 
 <wrap_addr>      ::= "Sets" "sets'" <address>
 
@@ -127,6 +130,7 @@ for each instruction:
 ```
 
 - **Subset-select**: `C = C[N]`, 0-indexed. Fails if C is undefined or N out of bounds.
+- **U-element**: `U[N]` (via `Sets sets sets' <n>`) — resolves to the N-th element of U, 0-indexed. Fails if N out of bounds. Can be assigned to (via subroutine definition) or used in A/B position.
 - **Union** (`"sets"`): concatenation (duplicates preserved).
 - **Intersection** (`"Set's"`): elements of A that also appear in B (preserves A order).
 - **Difference** (`"set"`): elements of A not in B (preserves A order).
@@ -144,13 +148,13 @@ A subroutine definition is a top-level construct (not an instruction):
 <definition>     ::= "Sets'" "Sets'" [<address>] <instruction>+ "Sets'"
 ```
 
-It creates a `SubroutineSet` whose elements are `LineSet` wrappers around each instruction's tokens. The subroutine is assigned to the given address (or C if omitted). This enables first-class subroutines that can be stored, passed around, and called.
+It creates a `SubroutineSet` whose elements are `LineSet` wrappers around each instruction's tokens. The subroutine is assigned to the given address (or C if omitted). The address can be any assignable target — `Set's sets` (U), `Set's set` (C), or `Sets sets sets' <n>` (U[n]). This enables first-class subroutines that can be stored at specific slots, passed around, and called.
 
 ```
-Sets' Sets' Set's sets       -- assign to U
+Sets' Sets' Sets sets sets' set  -- assign to U[1]
     Set sets Set's sets Set's sets set Set's set
-    Set set Set's sets Set's set set Set's sets
 Sets'
+Set Sets' Sets sets sets' set     -- call the subroutine at U[1]
 ```
 
 ## Simple cases
