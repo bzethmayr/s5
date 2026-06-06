@@ -2,7 +2,7 @@ import subprocess
 import sys
 from pathlib import Path
 import pytest
-from s5 import tokenize, Parser, Executor, SubroutineSet, LineSet, set_value, S5Set
+from s5 import tokenize, Parser, Executor, SubroutineSet, LineSet, set_value, S5Set, RuntimeError_
 
 HERE = Path(__file__).parent
 ROOT = HERE.parent
@@ -358,3 +358,42 @@ class TestCondCall:
         out, err, rc = run(src)
         assert "halted" in out
         assert rc == 0
+
+
+class TestUD:
+    def test_subr_define_at_u0_and_call(self):
+        src = (
+            "Sets' Sets' Sets sets sets'\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'\n"
+            "Set Sets' Sets sets sets'"
+        )
+        executor = Executor()
+        assert len(executor.U) == 1
+        status = executor.run(Parser(tokenize(src)).parse_program())
+        assert status == "finished"
+        assert len(executor.U) == 2
+
+    def test_subr_define_at_u0_store_type(self):
+        src = (
+            "Sets' Sets' Sets sets sets'\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'"
+        )
+        executor = Executor()
+        executor.run(Parser(tokenize(src)).parse_program())
+        assert isinstance(executor.U[0], SubroutineSet)
+
+    def test_ud_index_out_of_bounds_assign(self):
+        src = (
+            "Sets' Sets' Sets sets sets' set set\n"
+            "  Set sets Set's sets Set's sets set Set's sets\n"
+            "Sets'"
+        )
+        with pytest.raises(RuntimeError_, match="U\\[2\\] out of bounds"):
+            Executor().run(Parser(tokenize(src)).parse_program())
+
+    def test_ud_index_out_of_bounds_resolve(self):
+        src = "Set Sets' Sets sets sets' set set"
+        with pytest.raises(RuntimeError_, match="U\\[2\\] out of bounds"):
+            Executor().run(Parser(tokenize(src)).parse_program())
