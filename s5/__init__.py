@@ -12,17 +12,6 @@ class TokenType:
     SINGULAR_LOWER_APOS_APOS = "SINGULAR_LOWER_APOS_APOS"
 
 
-TOKEN_DISPLAY = {
-    TokenType.SINGULAR: "Set",
-    TokenType.SINGULAR_LOWER: "set",
-    TokenType.PLURAL_LOWER: "sets",
-    TokenType.SINGULAR_APOS: "Set's",
-    TokenType.PLURAL_APOS: "sets'",
-    TokenType.PLURAL_CAP: "Sets",
-    TokenType.PLURAL_CAP_APOS: "Sets'",
-    TokenType.SINGULAR_LOWER_APOS_APOS: "set's'",
-}
-
 WORD_MAP = {
     "Set": TokenType.SINGULAR,
     "set": TokenType.SINGULAR_LOWER,
@@ -33,6 +22,16 @@ WORD_MAP = {
     "Sets'": TokenType.PLURAL_CAP_APOS,
     "set's'": TokenType.SINGULAR_LOWER_APOS_APOS,
 }
+
+TOKEN_DISPLAY = {v: k for k, v in WORD_MAP.items()}
+
+
+def token(tt):
+    return TOKEN_DISPLAY[tt]
+
+
+def token_or(tt):
+    return TOKEN_DISPLAY.get(tt, tt)
 
 
 class Opcode:
@@ -139,9 +138,7 @@ class Parser:
     def expect(self, tt):
         t = self.consume()
         if t != tt:
-            d_tt = TOKEN_DISPLAY.get(tt, tt)
-            d_t = TOKEN_DISPLAY.get(t, t)
-            raise SyntaxError_(f"expected {d_tt}, got {d_t}")
+            raise SyntaxError_(f"expected {token(tt)}, got {token_or(t)}")
         return t
 
     def parse_program(self):
@@ -160,7 +157,7 @@ class Parser:
                     while self.peek() == TokenType.SINGULAR:
                         body.append(self.parse_instruction())
                     if self.peek() != TokenType.PLURAL_CAP_APOS:
-                        raise SyntaxError_("expected Sets' to end subroutine")
+                        raise SyntaxError_(f"expected {token(TokenType.PLURAL_CAP_APOS)} to end subroutine")
                     self.consume()
                     instructions.append(
                         Instruction(Opcode.SUBR, subr_body=body, addr_a=loc)
@@ -197,7 +194,7 @@ class Parser:
         elif t is None:
             raise SyntaxError_("expected opcode, got end of input")
         else:
-            raise SyntaxError_(f"expected opcode, got {TOKEN_DISPLAY.get(t, t)}")
+            raise SyntaxError_(f"expected opcode, got {token_or(t)}")
 
     def parse_operands(self, opcode):
         if opcode == Opcode.SUBSET_SELECT:
@@ -236,7 +233,7 @@ class Parser:
                 self.consume()
                 addr = Address(AddressType.C)
             else:
-                raise SyntaxError_(f"expected 'sets' or 'set' after 'Set's', got {t2}")
+                raise SyntaxError_(f"expected {token(TokenType.PLURAL_LOWER)} or {token(TokenType.SINGULAR_LOWER)} after {token(TokenType.SINGULAR_APOS)}, got {token_or(t2)}")
         elif t == TokenType.PLURAL_CAP:
             self.consume()
             t2 = self.peek()
@@ -255,7 +252,7 @@ class Parser:
                 n = self._parse_integer(bound_integer)
                 addr = Address(AddressType.UD, index=n)
             else:
-                raise SyntaxError_(f"expected 'set', 'sets', or 'sets'' after 'Sets', got {t2}")
+                raise SyntaxError_(f"expected {token(TokenType.SINGULAR_LOWER)}, {token(TokenType.PLURAL_LOWER)}, or {token(TokenType.PLURAL_APOS)} after {token(TokenType.PLURAL_CAP)}, got {token_or(t2)}")
         elif t == TokenType.PLURAL_LOWER:
             self.consume()
             if self.peek() == TokenType.SINGULAR_LOWER_APOS_APOS:
@@ -263,14 +260,14 @@ class Parser:
                 addr = Address(AddressType.IO_BYTE)
             else:
                 raise SyntaxError_(
-                    f"expected set's' after sets, got "
-                    f"{TOKEN_DISPLAY.get(self.peek(), self.peek())}"
+                    f"expected {token(TokenType.SINGULAR_LOWER_APOS_APOS)} after {token(TokenType.PLURAL_LOWER)}, got "
+                    f"{token_or(self.peek())}"
                 )
         elif t == TokenType.SINGULAR_LOWER_APOS_APOS:
             self.consume()
             addr = Address(AddressType.IO)
         else:
-            raise SyntaxError_(f"expected address, got {TOKEN_DISPLAY.get(t, t)}")
+            raise SyntaxError_(f"expected address, got {token_or(t)}")
 
         if self.peek() == TokenType.PLURAL_APOS:
             self.consume()
