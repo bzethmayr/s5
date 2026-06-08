@@ -14,14 +14,16 @@ from s5.__init__ import (
 def addr_repr(addr):
     if addr is None:
         return "None"
+    depth = addr.dispatch_depth if addr.dispatch_depth != 1 else ""
+    depth_s = f"^{depth}" if depth else ""
     if addr.type == AddressType.U:
-        return "U"
+        return f"U{depth_s}"
     if addr.type == AddressType.C:
-        return "C"
+        return f"C{depth_s}"
     if addr.type == AddressType.DERIVED:
-        return f"C[{addr.index}]"
+        return f"C[{addr.index}]{depth_s}"
     if addr.type == AddressType.UD:
-        return f"U[{addr.index}]"
+        return f"U[{addr.index}]{depth_s}"
     if addr.type == AddressType.WRAP:
         return f"WRAP({addr_repr(addr.sub_addr)})"
     if addr.type == AddressType.IO_BYTE:

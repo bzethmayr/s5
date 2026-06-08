@@ -10,7 +10,7 @@ Every token is a form of `"set"`. All computation is over ordered sets of sets. 
 | `set`     | difference opcode / integer **+1** / binary separator |
 | `sets`    | union opcode / integer **×2** / U-address suffix |
 | `Set's`   | intersection opcode / base-address prefix   |
-| `sets'`   | integer suffix / subset-select suffix       |
+| `sets'`   | integer suffix / subset-select suffix / dispatch-depth prefix |
 | `Sets`    | derived-address / wrap-address / subset-select opcode prefix |
 | `Sets'`   | declaration / end / subroutine delimiter    |
 | `set's'`  | integer I/O address                          |
@@ -70,7 +70,51 @@ H = false      Halted: set when len(U) reaches 0 after an instruction
 <integer>        ::= ("set" | "sets")*    -- mixed-unary: set=+1, sets=×2
 ```
 
-### Bounded integer (B-operand only)
+### Dispatch depth
+
+Any address may carry an optional **dispatch depth** suffix encoded as `sets'` followed by a
+mixed-unary integer. The integer encodes the number of extra resolution steps (default 0):
+
+```
+<dispatched_addr> ::= <address> ["sets'" <integer>]
+```
+
+Actual depth = `1 + integer_value`, so `sets' set` = depth 2, `sets' set sets` = depth 3, etc.
+The suffix is backward-compatible: no suffix means depth 1 (static/single dispatch).
+
+| Address                          | Meaning      | Depth |
+|----------------------------------|--------------|-------|
+| `Set's sets`                     | U            | 1     |
+| `Set's sets sets' set`           | U            | 2     |
+| `Set's set sets' set sets`       | C            | 3     |
+| `Sets set sets' set sets' set`   | C[1]         | 2     |
+| `Sets sets sets' set sets' set` | U[1]         | 3     |
+
+**R-value (read)**: resolve the address to a set V₁, then for each extra step use
+`set_value(Vᵢ)` as an index into U, yielding the next Vᵢ₊₁.
+
+```
+resolve(addr) → V₁
+for _ in range(depth - 1):
+    idx = set_value(Vᵢ)
+    Vᵢ₊₁ = U[idx]
+return Vᴅ
+```
+
+**L-value (write)**: resolve through `depth - 1` levels to find the target U-index,
+then store the value into `U[final_idx]`.
+
+```
+v = resolve_base(addr)
+for _ in range(depth - 2):
+    idx = set_value(v); v = U[idx]
+final_idx = set_value(v)
+U[final_idx] = value
+```
+
+This enables indirect subroutine dispatch (store a U-index in C, then call with
+`Set Sets' Set's set sets' set` to follow the chain) and indirect storage into U
+from any addressable location.
 
 In the **second** address of a binary instruction, the final `"set"` of an integer
 also serves as the instruction's separator token. Parsing uses a one-token

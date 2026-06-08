@@ -54,12 +54,13 @@ class AddressType:
 
 
 class Address:
-    __slots__ = ("type", "index", "sub_addr")
+    __slots__ = ("type", "index", "sub_addr", "dispatch_depth")
 
-    def __init__(self, addr_type, index=None, sub_addr=None):
+    def __init__(self, addr_type, index=None, sub_addr=None, dispatch_depth=1):
         self.type = addr_type
         self.index = index
         self.sub_addr = sub_addr
+        self.dispatch_depth = dispatch_depth
 
 
 class Instruction:
@@ -230,10 +231,10 @@ class Parser:
             t2 = self.peek()
             if t2 == TokenType.PLURAL_LOWER:
                 self.consume()
-                return Address(AddressType.U)
+                addr = Address(AddressType.U)
             elif t2 == TokenType.SINGULAR_LOWER:
                 self.consume()
-                return Address(AddressType.C)
+                addr = Address(AddressType.C)
             else:
                 raise SyntaxError_(f"expected 'sets' or 'set' after 'Set's', got {t2}")
         elif t == TokenType.PLURAL_CAP:
@@ -242,33 +243,42 @@ class Parser:
             if t2 == TokenType.PLURAL_APOS:
                 self.consume()
                 inner = self.parse_address(bound_integer)
-                return Address(AddressType.WRAP, sub_addr=inner)
+                addr = Address(AddressType.WRAP, sub_addr=inner)
             elif t2 == TokenType.SINGULAR_LOWER:
                 self.consume()
                 self.expect(TokenType.PLURAL_APOS)
                 n = self._parse_integer(bound_integer)
-                return Address(AddressType.DERIVED, index=n)
+                addr = Address(AddressType.DERIVED, index=n)
             elif t2 == TokenType.PLURAL_LOWER:
                 self.consume()
                 self.expect(TokenType.PLURAL_APOS)
                 n = self._parse_integer(bound_integer)
-                return Address(AddressType.UD, index=n)
+                addr = Address(AddressType.UD, index=n)
             else:
                 raise SyntaxError_(f"expected 'set', 'sets', or 'sets'' after 'Sets', got {t2}")
         elif t == TokenType.PLURAL_LOWER:
             self.consume()
             if self.peek() == TokenType.SINGULAR_LOWER_APOS_APOS:
                 self.consume()
-                return Address(AddressType.IO_BYTE)
-            raise SyntaxError_(
-                f"expected set's' after sets, got "
-                f"{TOKEN_DISPLAY.get(self.peek(), self.peek())}"
-            )
+                addr = Address(AddressType.IO_BYTE)
+            else:
+                raise SyntaxError_(
+                    f"expected set's' after sets, got "
+                    f"{TOKEN_DISPLAY.get(self.peek(), self.peek())}"
+                )
         elif t == TokenType.SINGULAR_LOWER_APOS_APOS:
             self.consume()
-            return Address(AddressType.IO)
+            addr = Address(AddressType.IO)
         else:
             raise SyntaxError_(f"expected address, got {TOKEN_DISPLAY.get(t, t)}")
+
+        if self.peek() == TokenType.PLURAL_APOS:
+            self.consume()
+            inc = self._parse_integer(stop_at_separator=bound_integer)
+            if inc < 0:
+                inc = 0
+            addr.dispatch_depth = 1 + inc
+        return addr
 
     def _is_followed_by_address(self):
         return self.peek(1) in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP)
@@ -394,7 +404,7 @@ class Executor:
         self.C = None
         self.halted = False
 
-    def resolve(self, addr):
+    def _resolve_base(self, addr):
         if addr.type == AddressType.U:
             return self.U
         elif addr.type == AddressType.C:
@@ -433,7 +443,18 @@ class Executor:
                 raise RuntimeError_(f"input: expected integer, got {line.strip()!r}")
             return int_to_s5set(n)
 
-    def assign(self, addr, value):
+    def resolve(self, addr):
+        value = self._resolve_base(addr)
+        for _ in range(addr.dispatch_depth - 1):
+            idx = set_value(value)
+            if idx >= len(self.U):
+                raise RuntimeError_(
+                    f"dispatch through U[{idx}] out of bounds (len={len(self.U)})"
+                )
+            value = self.U[idx]
+        return value
+
+    def _assign_base(self, addr, value):
         if addr.type == AddressType.WRAP:
             raise RuntimeError_("cannot assign to a wrap address")
         if addr.type == AddressType.IO_BYTE:
@@ -469,6 +490,27 @@ class Executor:
             items = list(self.U._items)
             items[addr.index] = value
             self.U = S5Set._from_items(items)
+
+    def assign(self, addr, value):
+        if addr.dispatch_depth > 1:
+            v = self._resolve_base(addr)
+            for _ in range(addr.dispatch_depth - 2):
+                idx = set_value(v)
+                if idx >= len(self.U):
+                    raise RuntimeError_(
+                        f"dispatch through U[{idx}] out of bounds (len={len(self.U)})"
+                    )
+                v = self.U[idx]
+            final_idx = set_value(v)
+            if final_idx >= len(self.U):
+                raise RuntimeError_(
+                    f"assign via dispatch: U[{final_idx}] out of bounds (len={len(self.U)})"
+                )
+            items = list(self.U._items)
+            items[final_idx] = value
+            self.U = S5Set._from_items(items)
+        else:
+            self._assign_base(addr, value)
 
     def _check_halt(self):
         if len(self.U) == 0:
