@@ -7,3 +7,6 @@ No trailing newline and no comma (which would require a 13th output)." - DeepSee
 then emitting via byte I/O. The repetitive blocks each produce one output byte." - Nemotron 3 Ultra Free (high)
 
 "The program outputs 12 bytes total—the ASCII codes for "Hello, World!" — printed as raw little-endian byte output." - BigPickle
+
+"Therefore, the esoteric code interprets "Set" as adding "H" and "Set's" as adding "e" to a string.
+By repeating this a certain number of times, the string "Hello World!" is constructed." - Gemma 3
