@@ -23,6 +23,17 @@ TOKEN_DISPLAY = {
     TokenType.SINGULAR_LOWER_APOS_APOS: "set's'",
 }
 
+WORD_MAP = {
+    "Set": TokenType.SINGULAR,
+    "set": TokenType.SINGULAR_LOWER,
+    "sets": TokenType.PLURAL_LOWER,
+    "Set's": TokenType.SINGULAR_APOS,
+    "sets'": TokenType.PLURAL_APOS,
+    "Sets": TokenType.PLURAL_CAP,
+    "Sets'": TokenType.PLURAL_CAP_APOS,
+    "set's'": TokenType.SINGULAR_LOWER_APOS_APOS,
+}
+
 
 class Opcode:
     SUBSET_SELECT = "SUBSET_SELECT"
@@ -80,40 +91,48 @@ class RuntimeError_(Exception):
 def tokenize(source):
     tokens = []
     for word in source.split():
-        if word == "Set":
-            tokens.append(TokenType.SINGULAR)
-        elif word == "set":
-            tokens.append(TokenType.SINGULAR_LOWER)
-        elif word == "sets":
-            tokens.append(TokenType.PLURAL_LOWER)
-        elif word == "Set's":
-            tokens.append(TokenType.SINGULAR_APOS)
-        elif word == "sets'":
-            tokens.append(TokenType.PLURAL_APOS)
-        elif word == "Sets":
-            tokens.append(TokenType.PLURAL_CAP)
-        elif word == "Sets'":
-            tokens.append(TokenType.PLURAL_CAP_APOS)
-        elif word == "set's'":
-            tokens.append(TokenType.SINGULAR_LOWER_APOS_APOS)
-        else:
+        token = WORD_MAP.get(word)
+        if token is None:
             raise TokenizerError(f"unknown token: {word!r}")
+        tokens.append(token)
     return tokens
 
 
+def tokenize_files(file_paths):
+    for path in file_paths:
+        with open(path, encoding="utf-8-sig") as f:
+            for line in f:
+                for word in line.split():
+                    token = WORD_MAP.get(word)
+                    if token is None:
+                        raise TokenizerError(f"unknown token: {word!r}")
+                    yield token
+
+
 class Parser:
-    def __init__(self, tokens):
-        self.tokens = tokens
-        self.pos = 0
+    def __init__(self, token_stream, lookahead=2):
+        self._it = iter(token_stream)
+        self._lookahead = lookahead
+        self._buf = []
+        self._refill()
 
-    def peek(self) -> str | None:
-        return self.tokens[self.pos] if self.pos < len(self.tokens) else None
+    def _refill(self):
+        while len(self._buf) < self._lookahead:
+            try:
+                self._buf.append(next(self._it))
+            except StopIteration:
+                break
 
-    def consume(self) -> str:
-        if self.pos >= len(self.tokens):
+    def peek(self, offset=0):
+        if offset >= len(self._buf):
+            return None
+        return self._buf[offset]
+
+    def consume(self):
+        if not self._buf:
             raise SyntaxError_("unexpected end of input")
-        t = self.tokens[self.pos]
-        self.pos += 1
+        t = self._buf.pop(0)
+        self._refill()
         return t
 
     def expect(self, tt):
@@ -126,7 +145,7 @@ class Parser:
 
     def parse_program(self):
         instructions = []
-        while self.pos < len(self.tokens):
+        while self.peek() is not None:
             t = self.peek()
             if t == TokenType.PLURAL_CAP_APOS:
                 self.consume()
@@ -252,11 +271,7 @@ class Parser:
             raise SyntaxError_(f"expected address, got {TOKEN_DISPLAY.get(t, t)}")
 
     def _is_followed_by_address(self):
-        save = self.pos
-        self.pos += 1
-        n = self.peek()
-        self.pos = save
-        return n in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP)
+        return self.peek(1) in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP)
 
     def _parse_integer(self, stop_at_separator=False):
         value = 0
@@ -525,22 +540,22 @@ def main():
 
     file_args = [a for a in sys.argv[1:] if a != "--repl"]
     if file_args:
-        with open(file_args[0], encoding="utf-8-sig") as f:
-            source = f.read()
+        token_stream = tokenize_files(file_args)
     else:
-        source = sys.stdin.read()
+        try:
+            token_stream = tokenize(sys.stdin.read())
+        except TokenizerError as e:
+            print(f"tokenizer error: {e}", file=sys.stderr)
+            sys.exit(1)
 
+    parser = Parser(token_stream)
     try:
-        tokens = tokenize(source)
-    except TokenizerError as e:
-        print(f"tokenizer error: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        parser = Parser(tokens)
         instructions = parser.parse_program()
     except SyntaxError_ as e:
         print(f"syntax error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except TokenizerError as e:
+        print(f"tokenizer error: {e}", file=sys.stderr)
         sys.exit(1)
 
     executor = Executor()
