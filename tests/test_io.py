@@ -269,7 +269,7 @@ class TestIOWithFd:
         finally:
             sys.stdout = old_out
         assert captured.getvalue().strip() == "42"
-        assert bytes(executor._io_bufs[1]) == b"42\n"
+        assert bytes(executor._io._bufs[1]) == b"42\n"
 
     def test_write_integer_to_fd2_goes_to_stderr_and_buffer(self):
         executor = Executor(buf_sizes={2: 1024})
@@ -283,7 +283,7 @@ class TestIOWithFd:
         finally:
             sys.stderr = old_err
         assert captured.getvalue().strip() == "99"
-        assert bytes(executor._io_bufs[2]) == b"99\n"
+        assert bytes(executor._io._bufs[2]) == b"99\n"
 
     def test_write_integer_to_fd0_populates_buffer_only(self):
         executor = Executor(buf_sizes={0: 1024})
@@ -297,15 +297,15 @@ class TestIOWithFd:
         finally:
             sys.stdout = old_out
         assert captured_out.getvalue() == ""
-        assert bytes(executor._io_bufs[0]) == b"42\n"
+        assert bytes(executor._io._bufs[0]) == b"42\n"
 
     def test_read_integer_from_fd0_uses_buffer_before_stdin(self):
         executor = Executor(buf_sizes={0: 1024})
-        executor._io_bufs[0] = bytearray(b"100\n")
+        executor._io._bufs[0] = bytearray(b"100\n")
         addr = self._io_addr(1)
         result = executor.resolve(addr)
         assert set_value(result) == 100
-        assert len(executor._io_bufs[0]) == 0
+        assert len(executor._io._bufs[0]) == 0
 
     def test_read_integer_from_fd0_falls_back_to_stdin(self):
         executor = Executor(buf_sizes={0: 1024})
@@ -320,14 +320,14 @@ class TestIOWithFd:
 
     def test_read_integer_from_fd1_reads_buffer(self):
         executor = Executor(buf_sizes={1: 1024})
-        executor._io_bufs[1] = bytearray(b"42\n")
+        executor._io._bufs[1] = bytearray(b"42\n")
         addr = self._io_addr(2)
         result = executor.resolve(addr)
         assert set_value(result) == 42
 
     def test_read_integer_from_fd2_reads_buffer(self):
         executor = Executor(buf_sizes={2: 1024})
-        executor._io_bufs[2] = bytearray(b"123\n")
+        executor._io._bufs[2] = bytearray(b"123\n")
         addr = self._io_addr(3)
         result = executor.resolve(addr)
         assert set_value(result) == 123
@@ -376,7 +376,7 @@ class TestIOWithFd:
             executor.assign(addr, int_to_s5set(12345))
         finally:
             sys.stdout = old_out
-        assert len(executor._io_bufs[1]) <= 10
+        assert len(executor._io._bufs[1]) <= 10
 
     def test_buffer_size_zero_discards_data(self):
         executor = Executor(buf_sizes={1: 0})
@@ -388,7 +388,7 @@ class TestIOWithFd:
             executor.assign(addr, int_to_s5set(42))
         finally:
             sys.stdout = old_out
-        assert len(executor._io_bufs[1]) == 0
+        assert len(executor._io._bufs[1]) == 0
         assert captured.getvalue().strip() == "42"
 
     def test_write_byte_to_fd1_goes_to_stdout_and_buffer(self):
@@ -405,11 +405,11 @@ class TestIOWithFd:
         finally:
             sys.stdout = old_out
         assert result == b'\xAB'
-        assert bytes(executor._io_bufs[1]) == b'\xAB'
+        assert bytes(executor._io._bufs[1]) == b'\xAB'
 
     def test_read_byte_from_fd0_uses_buffer(self):
         executor = Executor(buf_sizes={0: 1024})
-        executor._io_bufs[0] = bytearray(b'\x2A')
+        executor._io._bufs[0] = bytearray(b'\x2A')
         addr = self._byte_io_addr(1)
         result = executor.resolve(addr)
         assert set_value(result) == 42
@@ -443,11 +443,11 @@ class TestIOWithFd:
         finally:
             sys.stderr = old_err
         assert result == b'\x42'
-        assert bytes(executor._io_bufs[2]) == b'\x42'
+        assert bytes(executor._io._bufs[2]) == b'\x42'
 
     def test_positional_io_ignores_buffer(self):
         executor = Executor(buf_sizes={0: 1024})
-        executor._io_bufs[0] = bytearray(b"999\n")
+        executor._io._bufs[0] = bytearray(b"999\n")
         addr = Address(AddressType.IO)
         old_in = sys.stdin
         try:
