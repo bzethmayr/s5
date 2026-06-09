@@ -82,6 +82,12 @@ mixed-unary integer. The integer encodes the number of extra resolution steps (d
 Actual depth = `1 + integer_value`, so `sets' set` = depth 2, `sets' set sets` = depth 3, etc.
 The suffix is backward-compatible: no suffix means depth 1 (static/single dispatch).
 
+For **non-I/O** addresses (U, C, C[N], U[N], wrap) the dispatch depth controls the number of
+U-indirection steps as described below.
+
+For **I/O** addresses (`set's'` and `sets set's'`), the dispatch depth has a different meaning —
+it specifies a **file descriptor** (see *I/O with indirection* below).
+
 | Address                          | Meaning      | Depth |
 |----------------------------------|--------------|-------|
 | `Set's sets`                     | U            | 1     |
@@ -452,6 +458,33 @@ C = input ∪ U = 7-element set prepended to {∅}.
 Multi-byte output uses little-endian division: a set with value 256 emits `\x00\x01`,
 value 0 emits `\x00`.
 
+### I/O with indirection (file descriptor I/O)
+
+When a dispatch depth suffix is present on an I/O address, the depth value selects a
+**file descriptor** instead of triggering U-indirection:
+
+| Dispatch depth | File descriptor | Meaning           |
+|----------------|-----------------|-------------------|
+| 1 (`sets' sets`)  | 0               | stdin (buffered)  |
+| 2 (`sets' set`)   | 1               | stdout (buffered) |
+| 3 (`sets' set sets`) | 2            | stderr (buffered) |
+
+Dispatch depth 1 with the suffix `sets' sets` (integer value 0) is backward-compatible
+with the no-suffix case, except that buffered I/O rules apply.
+
+**Buffers**: each file descriptor has an associated byte buffer whose size defaults to 0
+(no buffering) and is configurable via the `--bufsize` / `-b` CLI flags. Buffer content
+is kept as a **tail** — only the last N bytes written to the descriptor are retained.
+
+| fd | Write behavior | Read behavior |
+|----|----------------|---------------|
+| 0 (stdin) | Appends to stdin buffer only (does not write to real stdin) | Reads from stdin buffer first; if empty, falls through to real stdin |
+| 1 (stdout) | Writes to real stdout *and* appends to stdout buffer | Reads from stdout buffer (previously written output) |
+| 2 (stderr) | Writes to real stderr *and* appends to stderr buffer | Reads from stderr buffer (previously written output) |
+
+This enables in-process piping: a program can write to fd 0 to queue input, or capture
+its own output by reading from fd 1/2.
+
 ### Subroutine: define, store, and call
 
 Define a subroutine in C that unions U with itself, then call it:
@@ -534,3 +567,23 @@ r →×2  = 42   ({∅} / sets)
 The mixed-unary encoding of 42 uses the same +1/×2 pattern
 as the binary representation `101010`, but with +1 applied where
 the binary bit is 1 and ×2 where it is 0.
+
+## CLI
+
+```
+usage: s5 [-h] [--repl] [--bufsize BUFSIZE] [--bufsize_0 BUFSIZE_0]
+          [--bufsize_1 BUFSIZE_1] [--bufsize_2 BUFSIZE_2]
+          [FILE ...]
+```
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--repl` | | Force REPL mode (stderr redirected to stdout) |
+| `--bufsize N` | `-b N` | Set IO buffer size for all file descriptors (default: 0) |
+| `--bufsize_0 N` | `-b0 N` | Set IO buffer size for stdin / fd 0 |
+| `--bufsize_1 N` | `-b1 N` | Set IO buffer size for stdout / fd 1 |
+| `--bufsize_2 N` | `-b2 N` | Set IO buffer size for stderr / fd 2 |
+
+Buffer size 0 means no data is retained; writes to an output descriptor still reach the
+real file descriptor, but reads from it will return empty (or for fd 0, fall through to
+real stdin). Non-zero sizes retain only the tail (last N bytes) of writes.

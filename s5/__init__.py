@@ -1,3 +1,5 @@
+import argparse
+import io
 import sys
 
 
@@ -53,13 +55,14 @@ class AddressType:
 
 
 class Address:
-    __slots__ = ("type", "index", "sub_addr", "dispatch_depth")
+    __slots__ = ("type", "index", "sub_addr", "dispatch_depth", "has_depth")
 
     def __init__(self, addr_type, index=None, sub_addr=None, dispatch_depth=1):
         self.type = addr_type
         self.index = index
         self.sub_addr = sub_addr
         self.dispatch_depth = dispatch_depth
+        self.has_depth = False
 
 
 class Instruction:
@@ -275,6 +278,7 @@ class Parser:
             if inc < 0:
                 inc = 0
             addr.dispatch_depth = 1 + inc
+            addr.has_depth = True
         return addr
 
     def _is_followed_by_address(self):
@@ -396,10 +400,100 @@ class SubroutineSet(S5Set):
 
 
 class Executor:
-    def __init__(self):
+    def __init__(self, buf_sizes=None):
         self.U = S5Set([S5Set()])
         self.C = None
         self.halted = False
+        self._io_bufs = {0: bytearray(), 1: bytearray(), 2: bytearray()}
+        self._buf_sizes = {0: 0, 1: 0, 2: 0}
+        if buf_sizes:
+            self._buf_sizes.update(buf_sizes)
+
+    def _buf_read_line(self, fd):
+        buf = self._io_bufs.get(fd)
+        if buf is None:
+            return None
+        idx = buf.find(b'\n')
+        if idx < 0:
+            return None
+        line = buf[:idx]
+        del buf[:idx + 1]
+        return line.decode('utf-8')
+
+    def _buf_read_byte(self, fd):
+        buf = self._io_bufs.get(fd)
+        if buf is None:
+            return None
+        if not buf:
+            return None
+        b = buf[0]
+        del buf[0]
+        return b
+
+    def _buf_append(self, fd, data):
+        buf = self._io_bufs.get(fd)
+        if buf is None:
+            return
+        buf.extend(data)
+        size = self._buf_sizes.get(fd, 0)
+        if size > 0 and len(buf) > size:
+            buf[:] = buf[-size:]
+        elif size == 0:
+            buf.clear()
+
+    def _resolve_io_fd(self, addr):
+        fd = addr.dispatch_depth - 1
+        if addr.type == AddressType.IO:
+            line = self._buf_read_line(fd)
+            if line is None:
+                if fd == 0:
+                    line = sys.stdin.readline()
+                else:
+                    raise RuntimeError_(f"input: fd {fd} buffer empty")
+            if not line:
+                raise RuntimeError_("input: unexpected EOF")
+            try:
+                n = int(line.strip())
+            except ValueError:
+                raise RuntimeError_(f"input: expected integer, got {line.strip()!r}")
+            return int_to_s5set(n)
+        else:
+            byte = self._buf_read_byte(fd)
+            if byte is None:
+                if fd == 0:
+                    raw = sys.stdin.buffer.read(1)
+                    if not raw:
+                        raise RuntimeError_("input: unexpected EOF")
+                    byte = raw[0]
+                else:
+                    raise RuntimeError_(f"input: fd {fd} buffer empty")
+            return int_to_s5set(byte)
+
+    def _assign_io_fd(self, addr, value):
+        fd = addr.dispatch_depth - 1
+        if addr.type == AddressType.IO:
+            n = set_value(value)
+            data = f"{n}\n".encode('utf-8')
+            self._buf_append(fd, data)
+            if fd == 1:
+                print(n)
+            elif fd == 2:
+                print(n, file=sys.stderr)
+        else:
+            n = set_value(value)
+            data = bytearray()
+            while True:
+                data.append(n & 0xFF)
+                n >>= 8
+                if n == 0:
+                    break
+            self._buf_append(fd, data)
+            if fd == 1:
+                sys.stdout.buffer.write(bytes(data))
+                sys.stdout.buffer.flush()
+            elif fd == 2:
+                sys.stderr.buffer.write(bytes(data))
+                sys.stderr.buffer.flush()
 
     def _resolve_base(self, addr):
         if addr.type == AddressType.U:
@@ -426,11 +520,15 @@ class Executor:
             inner = self.resolve(addr.sub_addr)
             return S5Set([inner])
         elif addr.type == AddressType.IO_BYTE:
+            if addr.has_depth:
+                return self._resolve_io_fd(addr)
             byte = sys.stdin.buffer.read(1)
             if not byte:
                 raise RuntimeError_("input: unexpected EOF")
             return int_to_s5set(byte[0])
         elif addr.type == AddressType.IO:
+            if addr.has_depth:
+                return self._resolve_io_fd(addr)
             line = sys.stdin.readline()
             if not line:
                 raise RuntimeError_("input: unexpected EOF")
@@ -442,6 +540,8 @@ class Executor:
 
     def resolve(self, addr):
         value = self._resolve_base(addr)
+        if addr.type in (AddressType.IO, AddressType.IO_BYTE) and addr.has_depth:
+            return value
         for _ in range(addr.dispatch_depth - 1):
             idx = set_value(value)
             if idx >= len(self.U):
@@ -455,6 +555,9 @@ class Executor:
         if addr.type == AddressType.WRAP:
             raise RuntimeError_("cannot assign to a wrap address")
         if addr.type == AddressType.IO_BYTE:
+            if addr.has_depth:
+                self._assign_io_fd(addr, value)
+                return
             n = set_value(value)
             while True:
                 sys.stdout.buffer.write(bytes([n & 0xFF]))
@@ -463,6 +566,9 @@ class Executor:
                     break
             sys.stdout.buffer.flush()
         elif addr.type == AddressType.IO:
+            if addr.has_depth:
+                self._assign_io_fd(addr, value)
+                return
             n = set_value(value)
             print(n)
         elif addr.type == AddressType.U:
@@ -490,6 +596,9 @@ class Executor:
 
     def assign(self, addr, value):
         if addr.dispatch_depth > 1:
+            if addr.type in (AddressType.IO, AddressType.IO_BYTE):
+                self._assign_base(addr, value)
+                return
             v = self._resolve_base(addr)
             for _ in range(addr.dispatch_depth - 2):
                 idx = set_value(v)
@@ -563,23 +672,54 @@ class Executor:
         return "finished"
 
 
-def detect_mode():
-    if "--repl" in sys.argv:
-        return "repl"
-    args = [a for a in sys.argv if a != "--repl"]
-    if len(args) > 1:
-        return "file"
-    return "repl" if sys.stdin.isatty() else "piped"
-
-
 def main():
-    mode = detect_mode()
+    arg_parser = argparse.ArgumentParser(
+        prog="s5", description="S5 - The Set-Only Language"
+    )
+    arg_parser.add_argument("--repl", action="store_true", help="force REPL mode")
+    arg_parser.add_argument(
+        "--bufsize", "-b", type=int, default=None,
+        help="set IO buffer size for all file descriptors"
+    )
+    arg_parser.add_argument(
+        "--bufsize_0", "-b0", type=int, default=None,
+        help="set IO buffer size for stdin (fd 0)"
+    )
+    arg_parser.add_argument(
+        "--bufsize_1", "-b1", type=int, default=None,
+        help="set IO buffer size for stdout (fd 1)"
+    )
+    arg_parser.add_argument(
+        "--bufsize_2", "-b2", type=int, default=None,
+        help="set IO buffer size for stderr (fd 2)"
+    )
+    arg_parser.add_argument(
+        "files", nargs="*", metavar="FILE", help="S5 source files"
+    )
+    args = arg_parser.parse_args()
+
+    if args.repl:
+        mode = "repl"
+    elif args.files:
+        mode = "file"
+    else:
+        mode = "repl" if sys.stdin.isatty() else "piped"
+
     if mode == "repl":
         sys.stderr = sys.stdout
 
-    file_args = [a for a in sys.argv[1:] if a != "--repl"]
-    if file_args:
-        token_stream = tokenize_files(file_args)
+    buf_sizes = {}
+    if args.bufsize is not None:
+        buf_sizes = {0: args.bufsize, 1: args.bufsize, 2: args.bufsize}
+    if args.bufsize_0 is not None:
+        buf_sizes[0] = args.bufsize_0
+    if args.bufsize_1 is not None:
+        buf_sizes[1] = args.bufsize_1
+    if args.bufsize_2 is not None:
+        buf_sizes[2] = args.bufsize_2
+
+    if args.files:
+        token_stream = tokenize_files(args.files)
     else:
         try:
             token_stream = tokenize(sys.stdin.read())
@@ -597,7 +737,7 @@ def main():
         print(f"tokenizer error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    executor = Executor()
+    executor = Executor(buf_sizes=buf_sizes)
     try:
         status = executor.run(instructions)
         if mode == "repl":

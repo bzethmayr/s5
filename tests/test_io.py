@@ -220,3 +220,239 @@ class TestByteIO:
         finally:
             if prog_file.exists():
                 prog_file.unlink()
+
+
+class TestIOWithFd:
+    def test_parse_has_depth_with_suffix(self):
+        addr = Parser(tokenize("set's' sets' set")).parse_address()
+        assert addr.type == AddressType.IO
+        assert addr.dispatch_depth == 2
+        assert addr.has_depth
+
+    def test_parse_no_has_depth_without_suffix(self):
+        addr = Parser(tokenize("set's'")).parse_address()
+        assert addr.type == AddressType.IO
+        assert addr.dispatch_depth == 1
+        assert not addr.has_depth
+
+    def test_parse_has_depth_zero_inc(self):
+        addr = Parser(tokenize("set's' sets' sets")).parse_address()
+        assert addr.type == AddressType.IO
+        assert addr.dispatch_depth == 1
+        assert addr.has_depth
+
+    def test_parse_byte_io_has_depth(self):
+        addr = Parser(tokenize("sets set's' sets' set sets")).parse_address()
+        assert addr.type == AddressType.IO_BYTE
+        assert addr.dispatch_depth == 3
+        assert addr.has_depth
+
+    def _io_addr(self, depth):
+        addr = Address(AddressType.IO, dispatch_depth=depth)
+        addr.has_depth = True
+        return addr
+
+    def _byte_io_addr(self, depth):
+        addr = Address(AddressType.IO_BYTE, dispatch_depth=depth)
+        addr.has_depth = True
+        return addr
+
+    def test_write_integer_to_fd1_goes_to_stdout_and_buffer(self):
+        executor = Executor(buf_sizes={1: 1024})
+        addr = self._io_addr(2)
+        value = int_to_s5set(42)
+        captured = io.StringIO()
+        old_out = sys.stdout
+        try:
+            sys.stdout = captured
+            executor.assign(addr, value)
+        finally:
+            sys.stdout = old_out
+        assert captured.getvalue().strip() == "42"
+        assert bytes(executor._io_bufs[1]) == b"42\n"
+
+    def test_write_integer_to_fd2_goes_to_stderr_and_buffer(self):
+        executor = Executor(buf_sizes={2: 1024})
+        addr = self._io_addr(3)
+        value = int_to_s5set(99)
+        captured = io.StringIO()
+        old_err = sys.stderr
+        try:
+            sys.stderr = captured
+            executor.assign(addr, value)
+        finally:
+            sys.stderr = old_err
+        assert captured.getvalue().strip() == "99"
+        assert bytes(executor._io_bufs[2]) == b"99\n"
+
+    def test_write_integer_to_fd0_populates_buffer_only(self):
+        executor = Executor(buf_sizes={0: 1024})
+        addr = self._io_addr(1)
+        value = int_to_s5set(42)
+        captured_out = io.StringIO()
+        old_out = sys.stdout
+        try:
+            sys.stdout = captured_out
+            executor.assign(addr, value)
+        finally:
+            sys.stdout = old_out
+        assert captured_out.getvalue() == ""
+        assert bytes(executor._io_bufs[0]) == b"42\n"
+
+    def test_read_integer_from_fd0_uses_buffer_before_stdin(self):
+        executor = Executor(buf_sizes={0: 1024})
+        executor._io_bufs[0] = bytearray(b"100\n")
+        addr = self._io_addr(1)
+        result = executor.resolve(addr)
+        assert set_value(result) == 100
+        assert len(executor._io_bufs[0]) == 0
+
+    def test_read_integer_from_fd0_falls_back_to_stdin(self):
+        executor = Executor(buf_sizes={0: 1024})
+        addr = self._io_addr(1)
+        old_in = sys.stdin
+        try:
+            sys.stdin = io.StringIO("77\n")
+            result = executor.resolve(addr)
+        finally:
+            sys.stdin = old_in
+        assert set_value(result) == 77
+
+    def test_read_integer_from_fd1_reads_buffer(self):
+        executor = Executor(buf_sizes={1: 1024})
+        executor._io_bufs[1] = bytearray(b"42\n")
+        addr = self._io_addr(2)
+        result = executor.resolve(addr)
+        assert set_value(result) == 42
+
+    def test_read_integer_from_fd2_reads_buffer(self):
+        executor = Executor(buf_sizes={2: 1024})
+        executor._io_bufs[2] = bytearray(b"123\n")
+        addr = self._io_addr(3)
+        result = executor.resolve(addr)
+        assert set_value(result) == 123
+
+    def test_read_integer_from_output_fd_empty_raises(self):
+        executor = Executor(buf_sizes={1: 1024})
+        addr = self._io_addr(2)
+        with pytest.raises(Exception, match="buffer empty"):
+            executor.resolve(addr)
+
+    def test_write_then_read_integer_through_fd1(self):
+        executor = Executor(buf_sizes={1: 1024})
+        write_addr = self._io_addr(2)
+        read_addr = self._io_addr(2)
+        captured = io.StringIO()
+        old_out = sys.stdout
+        try:
+            sys.stdout = captured
+            executor.assign(write_addr, int_to_s5set(42))
+        finally:
+            sys.stdout = old_out
+        result = executor.resolve(read_addr)
+        assert set_value(result) == 42
+
+    def test_write_then_read_integer_through_fd2(self):
+        executor = Executor(buf_sizes={2: 1024})
+        write_addr = self._io_addr(3)
+        read_addr = self._io_addr(3)
+        captured = io.StringIO()
+        old_err = sys.stderr
+        try:
+            sys.stderr = captured
+            executor.assign(write_addr, int_to_s5set(255))
+        finally:
+            sys.stderr = old_err
+        result = executor.resolve(read_addr)
+        assert set_value(result) == 255
+
+    def test_buffer_tail_with_size_limit(self):
+        executor = Executor(buf_sizes={1: 10})
+        addr = self._io_addr(2)
+        captured = io.StringIO()
+        old_out = sys.stdout
+        try:
+            sys.stdout = captured
+            executor.assign(addr, int_to_s5set(12345))
+        finally:
+            sys.stdout = old_out
+        assert len(executor._io_bufs[1]) <= 10
+
+    def test_buffer_size_zero_discards_data(self):
+        executor = Executor(buf_sizes={1: 0})
+        addr = self._io_addr(2)
+        captured = io.StringIO()
+        old_out = sys.stdout
+        try:
+            sys.stdout = captured
+            executor.assign(addr, int_to_s5set(42))
+        finally:
+            sys.stdout = old_out
+        assert len(executor._io_bufs[1]) == 0
+        assert captured.getvalue().strip() == "42"
+
+    def test_write_byte_to_fd1_goes_to_stdout_and_buffer(self):
+        executor = Executor(buf_sizes={1: 1024})
+        addr = self._byte_io_addr(2)
+        value = int_to_s5set(0xAB)
+        buf = io.BytesIO()
+        old_out = sys.stdout
+        try:
+            sys.stdout = io.TextIOWrapper(buf, encoding='latin-1')
+            executor.assign(addr, value)
+            sys.stdout.flush()
+            result = buf.getvalue()
+        finally:
+            sys.stdout = old_out
+        assert result == b'\xAB'
+        assert bytes(executor._io_bufs[1]) == b'\xAB'
+
+    def test_read_byte_from_fd0_uses_buffer(self):
+        executor = Executor(buf_sizes={0: 1024})
+        executor._io_bufs[0] = bytearray(b'\x2A')
+        addr = self._byte_io_addr(1)
+        result = executor.resolve(addr)
+        assert set_value(result) == 42
+
+    def test_write_then_read_byte_through_fd1(self):
+        executor = Executor(buf_sizes={1: 1024})
+        write_addr = self._byte_io_addr(2)
+        read_addr = self._byte_io_addr(2)
+        buf = io.BytesIO()
+        old_out = sys.stdout
+        try:
+            sys.stdout = io.TextIOWrapper(buf, encoding='latin-1')
+            executor.assign(write_addr, int_to_s5set(200))
+            sys.stdout.flush()
+        finally:
+            sys.stdout = old_out
+        read_result = executor.resolve(read_addr)
+        assert set_value(read_result) == 200
+
+    def test_write_byte_to_fd2_goes_to_stderr_and_buffer(self):
+        executor = Executor(buf_sizes={2: 1024})
+        addr = self._byte_io_addr(3)
+        value = int_to_s5set(0x42)
+        captured = io.BytesIO()
+        old_err = sys.stderr
+        try:
+            sys.stderr = io.TextIOWrapper(captured, encoding='latin-1')
+            executor.assign(addr, value)
+            sys.stderr.flush()
+            result = captured.getvalue()
+        finally:
+            sys.stderr = old_err
+        assert result == b'\x42'
+        assert bytes(executor._io_bufs[2]) == b'\x42'
+
+    def test_positional_io_ignores_buffer(self):
+        executor = Executor(buf_sizes={0: 1024})
+        executor._io_bufs[0] = bytearray(b"999\n")
+        addr = Address(AddressType.IO)
+        old_in = sys.stdin
+        try:
+            sys.stdin = io.StringIO("42\n")
+            result = executor.resolve(addr)
+        finally:
+            sys.stdin = old_in
+        assert set_value(result) == 42
