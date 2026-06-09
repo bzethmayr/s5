@@ -344,3 +344,22 @@ class TestCLIIntegration:
                 text_file.unlink()
             if bin_file.exists():
                 bin_file.unlink()
+
+    def test_compile_and_run_hello_golfed(self):
+        src_file = ROOT / "hello_golfed.s5"
+        bin_file = ROOT / "hello_golfed.s5b"
+        try:
+            p = subprocess.run(
+                [sys.executable, "-m", "s5", "-c", str(src_file)],
+                capture_output=True, cwd=str(ROOT))
+            assert p.returncode == 0, f"compile failed: {p.stderr}"
+            assert bin_file.exists()
+
+            p2 = subprocess.run(
+                [sys.executable, "-m", "s5", str(bin_file)],
+                capture_output=True, text=True, cwd=str(ROOT))
+            assert p2.returncode == 0
+            assert p2.stdout == "Hello, World!"
+        finally:
+            if bin_file.exists():
+                bin_file.unlink()

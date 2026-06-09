@@ -120,6 +120,14 @@ class TestIOIntegration:
         assert p.returncode == 0
         assert p.stdout == "Hello World!"
 
+    def test_hello_golfed_via_file_mode(self):
+        prog_file = ROOT / "hello_golfed.s5"
+        p = subprocess.run(
+            [sys.executable, "-m", "s5", str(prog_file)],
+            capture_output=True, text=True, cwd=str(ROOT))
+        assert p.returncode == 0
+        assert p.stdout == "Hello, World!"
+
 
 class TestByteIO:
     def test_tokenize(self):
