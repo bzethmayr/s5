@@ -409,8 +409,8 @@ Set sets set's' Set's sets set Set's set
 | `set`        | separator          |
 | `Set's set`  | D = C              |
 
-Input `7\n` → `int_to_s5set(7)` = `{∅, {∅}, ∅, {∅}, ∅, {∅}, ∅}`.
-C = input ∪ U = 7-element set prepended to {∅}.
+Input `7\n` → `int_to_s5set(7)` = `{∅, {∅}, ∅, {∅}, ∅}`.
+C = input ∪ U = 5-element set prepended to {∅}.
 
 ### Byte I/O: raw byte input and output
 
@@ -452,8 +452,8 @@ Set sets sets set's' Set's sets set Set's set
 | `set`          | separator          |
 | `Set's set`    | D = C              |
 
-Input `\x2A` → `int_to_s5set(42)` = `{∅, {∅}, ∅, {∅}, ∅, {∅}, ∅}`.
-C = input ∪ U = 7-element set prepended to {∅}.
+Input `\x2A` → `int_to_s5set(42)` = `{∅, {∅}, {∅}, ∅, {∅}, {∅}, ∅, {∅}}`.
+C = input ∪ U = 8-element set prepended to {∅}.
 
 Multi-byte output uses little-endian division: a set with value 256 emits `\x00\x01`,
 value 0 emits `\x00`.
