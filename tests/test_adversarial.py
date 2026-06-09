@@ -31,7 +31,8 @@ class TestTokenizerAdversarial:
 
     def test_whitespace_only(self):
         out, err, rc = run("   \t\n  \r\n  ")
-        assert out == "finished"
+        assert rc != 0
+        assert "parity mismatch" in out
 
 
 class TestParserAdversarial:

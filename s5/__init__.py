@@ -50,6 +50,7 @@ class AddressType:
     WRAP = "WRAP"
     IO = "IO"
     IO_BYTE = "IO_BYTE"
+    IO_S5B = "IO_S5B"
 
 
 class Address:
@@ -255,14 +256,25 @@ class Parser:
             else:
                 raise SyntaxError_(f"expected {token(TokenType.SINGULAR_LOWER)}, {token(TokenType.PLURAL_LOWER)}, or {token(TokenType.PLURAL_APOS)} after {token(TokenType.PLURAL_CAP)}, got {token_or(t2)}")
         elif t == TokenType.PLURAL_LOWER:
-            self.consume()
+            count = 0
+            while self.peek() == TokenType.PLURAL_LOWER:
+                self.consume()
+                count += 1
             if self.peek() == TokenType.SINGULAR_LOWER_APOS_APOS:
                 self.consume()
-                addr = Address(AddressType.IO_BYTE)
+                if count == 1:
+                    addr = Address(AddressType.IO_BYTE)
+                elif count == 2:
+                    addr = Address(AddressType.IO_S5B)
+                else:
+                    raise SyntaxError_(
+                        f"expected 1 or 2 of {token(TokenType.PLURAL_LOWER)} before "
+                        f"{token(TokenType.SINGULAR_LOWER_APOS_APOS)}, got {count}"
+                    )
             else:
                 raise SyntaxError_(
-                    f"expected {token(TokenType.SINGULAR_LOWER_APOS_APOS)} after {token(TokenType.PLURAL_LOWER)}, got "
-                    f"{token_or(self.peek())}"
+                    f"expected {token(TokenType.SINGULAR_LOWER_APOS_APOS)} after "
+                    f"{token(TokenType.PLURAL_LOWER)}, got {token_or(self.peek())}"
                 )
         elif t == TokenType.SINGULAR_LOWER_APOS_APOS:
             self.consume()
@@ -390,11 +402,12 @@ class LineSet(S5Set):
 
 
 class SubroutineSet(S5Set):
-    __slots__ = ("_body",)
+    __slots__ = ("_body", "_io_s5b")
 
-    def __init__(self, body, items):
+    def __init__(self, body, items, io_s5b=False):
         super().__init__(items)
         self._body = body
+        self._io_s5b = io_s5b
 
 
 class Executor:
@@ -437,6 +450,13 @@ class Executor:
             if not byte:
                 raise RuntimeError_("input: unexpected EOF")
             return int_to_s5set(byte[0])
+        elif addr.type == AddressType.IO_S5B:
+            if addr.has_depth:
+                return self._io.resolve(AddressType.IO_S5B, addr.dispatch_depth - 1)
+            raw = sys.stdin.buffer.read()
+            if not raw:
+                raise RuntimeError_("input: unexpected EOF")
+            return _read_s5b(raw)
         elif addr.type == AddressType.IO:
             if addr.has_depth:
                 return self._io.resolve(AddressType.IO, addr.dispatch_depth - 1)
@@ -451,7 +471,7 @@ class Executor:
 
     def resolve(self, addr):
         value = self._resolve_base(addr)
-        if addr.type in (AddressType.IO, AddressType.IO_BYTE):
+        if addr.type in (AddressType.IO, AddressType.IO_BYTE, AddressType.IO_S5B):
             return value
         for _ in range(addr.dispatch_depth - 1):
             idx = set_value(value)
@@ -475,6 +495,13 @@ class Executor:
                 n >>= 8
                 if n == 0:
                     break
+            sys.stdout.buffer.flush()
+        elif addr.type == AddressType.IO_S5B:
+            if addr.has_depth:
+                self._io.assign(AddressType.IO_S5B, addr.dispatch_depth - 1, value)
+                return
+            data = _write_s5b(value)
+            sys.stdout.buffer.write(data)
             sys.stdout.buffer.flush()
         elif addr.type == AddressType.IO:
             if addr.has_depth:
@@ -506,7 +533,7 @@ class Executor:
             self.U = S5Set._from_items(items)
 
     def assign(self, addr, value):
-        if addr.type in (AddressType.IO, AddressType.IO_BYTE):
+        if addr.type in (AddressType.IO, AddressType.IO_BYTE, AddressType.IO_S5B):
             self._assign_base(addr, value)
             return
         if addr.dispatch_depth > 1:
@@ -566,6 +593,11 @@ class Executor:
         else:
             a = self.resolve(instr.addr_a)
             b = self.resolve(instr.addr_b)
+            for val in (a, b):
+                if isinstance(val, SubroutineSet) and val._io_s5b:
+                    self.run(val._body)
+            a = int_to_s5set(set_value(a)) if isinstance(a, SubroutineSet) else a
+            b = int_to_s5set(set_value(b)) if isinstance(b, SubroutineSet) else b
             if instr.opcode == Opcode.UNION:
                 result = a.union(b)
             elif instr.opcode == Opcode.INTERSECTION:
@@ -583,6 +615,28 @@ class Executor:
         return "finished"
 
 
+def _read_s5b(data):
+    tokens = list(decode_tokens(data))
+    instructions = Parser(tokens).parse_program()
+    return SubroutineSet(instructions, [LineSet(i) for i in instructions], io_s5b=True)
+
+
+def _write_s5b(value):
+    if isinstance(value, SubroutineSet):
+        from s5.serialize import serialize_body
+        tokens = serialize_body(value._body)
+    else:
+        n = set_value(value)
+        codes = []
+        while n:
+            codes.append(n & 7)
+            n >>= 3
+        tokens = [CODE_TO_TOKEN[c] for c in reversed(codes)]
+    return bytes(encode_tokens(tokens))
+
+
 from s5.io_handler import IOHandler
+
+from s5.binary import encode_tokens, decode_tokens, sniff, CODE_TO_TOKEN
 
 from s5.cli import main

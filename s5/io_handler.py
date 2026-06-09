@@ -1,6 +1,6 @@
 import sys
 
-from s5 import int_to_s5set, set_value, AddressType, RuntimeError_
+from s5 import int_to_s5set, set_value, AddressType, RuntimeError_, _read_s5b, _write_s5b
 
 
 class IOHandler:
@@ -31,6 +31,16 @@ class IOHandler:
         del buf[0]
         return b
 
+    def _read_all(self, fd):
+        buf = self._bufs.get(fd)
+        if buf is None:
+            return None
+        if not buf:
+            return None
+        data = bytes(buf)
+        buf.clear()
+        return data
+
     def _append(self, fd, data):
         buf = self._bufs.get(fd)
         if buf is None:
@@ -57,6 +67,16 @@ class IOHandler:
             except ValueError:
                 raise RuntimeError_(f"input: expected integer, got {line.strip()!r}")
             return int_to_s5set(n)
+        elif addr_type == AddressType.IO_S5B:
+            raw = self._read_all(fd)
+            if raw is None:
+                if fd == 0:
+                    raw = sys.stdin.buffer.read()
+                else:
+                    raise RuntimeError_(f"input: fd {fd} buffer empty")
+            if not raw:
+                raise RuntimeError_("input: unexpected EOF")
+            return _read_s5b(raw)
         else:
             byte = self._read_byte(fd)
             if byte is None:
@@ -78,6 +98,15 @@ class IOHandler:
                 print(n)
             elif fd == 2:
                 print(n, file=sys.stderr)
+        elif addr_type == AddressType.IO_S5B:
+            data = _write_s5b(value)
+            self._append(fd, data)
+            if fd == 1:
+                sys.stdout.buffer.write(data)
+                sys.stdout.buffer.flush()
+            elif fd == 2:
+                sys.stderr.buffer.write(data)
+                sys.stderr.buffer.flush()
         else:
             n = set_value(value)
             data = bytearray()

@@ -88,7 +88,7 @@ def test_c_undefined():
 
 
 def test_bad_token():
-    out, err, rc = run("foo")
+    out, err, rc = run("S foo")
     assert "unknown token" in out
 
 
