@@ -632,7 +632,7 @@ the binary bit is 1 and ×2 where it is 0.
 ## CLI
 
 ```
-usage: s5 [-h] [--repl] [--bufsize BUFSIZE] [--bufsize_0 BUFSIZE_0]
+usage: s5 [-h] [--pretty] [--repl] [--bufsize BUFSIZE] [--bufsize_0 BUFSIZE_0]
           [--bufsize_1 BUFSIZE_1] [--bufsize_2 BUFSIZE_2]
           [FILE ...]
 ```
@@ -640,6 +640,7 @@ usage: s5 [-h] [--repl] [--bufsize BUFSIZE] [--bufsize_0 BUFSIZE_0]
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--repl` | | Force REPL mode (stderr redirected to stdout) |
+| `--pretty` | `-p` | Pretty-print parsed source to stdout instead of executing |
 | `--bufsize N` | `-b N` | Set IO buffer size for all file descriptors (default: 0) |
 | `--bufsize_0 N` | `-b0 N` | Set IO buffer size for stdin / fd 0 |
 | `--bufsize_1 N` | `-b1 N` | Set IO buffer size for stdout / fd 1 |
@@ -648,3 +649,8 @@ usage: s5 [-h] [--repl] [--bufsize BUFSIZE] [--bufsize_0 BUFSIZE_0]
 Buffer size 0 means no data is retained; writes to an output descriptor still reach the
 real file descriptor, but reads from it will return empty (or for fd 0, fall through to
 real stdin). Non-zero sizes retain only the tail (last N bytes) of writes.
+
+The `--pretty` flag parses the source and prints it back with one instruction per line,
+subroutine definitions (`Sets' Sets' ... Sets'`) on their own lines, and subroutine
+bodies indented. This produces a canonical formatted view of any valid s5 program,
+useful for reading or diffing.
