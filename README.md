@@ -637,14 +637,14 @@ usage: s5 [-h] [--pretty] [--repl] [--bufsize BUFSIZE] [--bufsize_0 BUFSIZE_0]
           [FILE ...]
 ```
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--repl` | | Force REPL mode (stderr redirected to stdout) |
-| `--pretty` | `-p` | Pretty-print parsed source to stdout instead of executing |
-| `--bufsize N` | `-b N` | Set IO buffer size for all file descriptors (default: 0) |
-| `--bufsize_0 N` | `-b0 N` | Set IO buffer size for stdin / fd 0 |
-| `--bufsize_1 N` | `-b1 N` | Set IO buffer size for stdout / fd 1 |
-| `--bufsize_2 N` | `-b2 N` | Set IO buffer size for stderr / fd 2 |
+| Flag | Short | Description | Normative |
+|------|-------|-------------|-----------|
+| `--repl` | | Force REPL mode (stderr redirected to stdout) | No |
+| `--pretty` | `-p` | Pretty-print parsed source to stdout instead of executing | No |
+| `--bufsize N` | `-b N` | Set IO buffer size for all file descriptors (default: 0) | Yes |
+| `--bufsize_0 N` | `-b0 N` | Set IO buffer size for stdin / fd 0 | No |
+| `--bufsize_1 N` | `-b1 N` | Set IO buffer size for stdout / fd 1 | No |
+| `--bufsize_2 N` | `-b2 N` | Set IO buffer size for stderr / fd 2 | No |
 
 Buffer size 0 means no data is retained; writes to an output descriptor still reach the
 real file descriptor, but reads from it will return empty (or for fd 0, fall through to
