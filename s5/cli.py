@@ -88,6 +88,10 @@ def main():
         help="compile source to .s5b binary",
     )
     arg_parser.add_argument(
+        "--pretty", "-p", action="store_true",
+        help="pretty-print parsed source to stdout",
+    )
+    arg_parser.add_argument(
         "--bufsize", "-b", type=int, default=None,
         help="set IO buffer size for all file descriptors"
     )
@@ -158,6 +162,11 @@ def main():
     except TokenizerError as e:
         print(f"tokenizer error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    if args.pretty:
+        from s5.pretty import pretty_print
+        print(pretty_print(instructions), end="")
+        return
 
     executor = Executor(buf_sizes=buf_sizes)
     try:
