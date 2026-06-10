@@ -14,8 +14,8 @@ Every token is a form of `"set"`. All computation is over ordered sets of sets. 
 | `Sets`    | derived-address / wrap-address / subset-select opcode prefix |
 | `Sets'`   | declaration / end / subroutine delimiter    |
 | `set's'`  | integer I/O address                          |
-| `sets set's'` | byte I/O address (2 tokens - "0I" or "0O") |
-| `sets sets set's'` | s5b I/O address (3 tokens) |
+| `sets set's'` | byte I/O address (2 tokens - "0" prefix) |
+| `sets sets set's'` | s5b I/O address (3 tokens - "00" prefix) |
 
 ## Initial state
 
