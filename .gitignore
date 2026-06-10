@@ -6,3 +6,5 @@ dist/
 
 .opencode/
 README.mw
+
+*.s5b
