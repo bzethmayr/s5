@@ -292,7 +292,11 @@ class Parser:
         return addr
 
     def _is_followed_by_address(self):
-        return self.peek(1) in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP)
+        return self.peek(1) in (
+            TokenType.SINGULAR_APOS,
+            TokenType.PLURAL_CAP,
+            TokenType.SINGULAR_LOWER_APOS_APOS,
+        )
 
     def _parse_integer(self, stop_at_separator=False):
         value = 0
