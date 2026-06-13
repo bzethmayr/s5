@@ -2,7 +2,10 @@ import subprocess
 import sys
 from pathlib import Path
 import pytest
-from s5 import tokenize, Parser, Executor, SubroutineSet, LineSet, set_value, S5Set, RuntimeError_
+from s5 import (
+    tokenize, Parser, Executor, SubroutineSet, LineSet, set_value, S5Set,
+    RuntimeError_, Instruction, Opcode, Address, AddressType, int_to_s5set,
+)
 
 HERE = Path(__file__).parent
 ROOT = HERE.parent
@@ -397,3 +400,54 @@ class TestUD:
         src = "Set Sets' Sets sets sets' set set"
         with pytest.raises(RuntimeError_, match="U\\[2\\] out of bounds"):
             Executor().run(Parser(tokenize(src)).parse_program())
+
+
+class TestSubrValue:
+    def make_instr(self):
+        return Instruction(
+            Opcode.UNION,
+            addr_a=Address(AddressType.U),
+            addr_b=Address(AddressType.U),
+            addr_dest=Address(AddressType.U),
+        )
+
+    def test_subr_value_equals_instruction_count(self):
+        instr = self.make_instr()
+        n = 3
+        subr = SubroutineSet([instr] * n, [LineSet(i) for i in [instr] * n])
+        assert set_value(subr) == n
+
+    def test_subr_union_one_normalize(self):
+        instr = self.make_instr()
+        n = 3
+        subr = SubroutineSet([instr] * n, [LineSet(i) for i in [instr] * n])
+        assert set_value(subr) == n
+
+        ONE = S5Set([S5Set()])
+        combined = subr.union(ONE)
+        assert set_value(combined) == n + 1
+
+        normalized = int_to_s5set(set_value(combined))
+        assert set_value(normalized) == n + 1
+        assert normalized == int_to_s5set(n + 1)
+
+    def test_subr_union_one_commutes(self):
+        instr = self.make_instr()
+        n = 3
+        subr = SubroutineSet([instr] * n, [LineSet(i) for i in [instr] * n])
+        ONE = S5Set([S5Set()])
+        assert set_value(ONE.union(subr)) == set_value(subr.union(ONE)) == n + 1
+
+    def test_normalized_suffix_encoding(self):
+        # Suffix concatenation of normalized sets does not combine
+        # by simple arithmetic — the result depends on the internal
+        # arrangement of empty/nonempty elements in each operand.
+        # This is a fundamental limit of using values operationally.
+        # int_to_s5set(2) = [{}, {∅}]        len: 0, 1
+        # int_to_s5set(4) = [{}, {∅}, {∅}]   len: 0, 1, 1
+        # concatenated  : [{}, {∅}, {}, {∅}, {∅}]  len: 0, 1, 0, 1, 1
+        # set_value: 0→+1=1→×2=2→+1=3→×2=6→×2=12
+        base = int_to_s5set(2)
+        norm = int_to_s5set(4)
+        with_suffix = base.union(norm)
+        assert set_value(with_suffix) == 12

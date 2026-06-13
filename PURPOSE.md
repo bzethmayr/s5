@@ -13,5 +13,5 @@ Minor features:
 * Whitespace-agnostic
    * but go ahead and indent whatever you like
 * No bitwise capability
-* No integer arithmetic*
+* No integer arithmetic[\*](./ARITHMETIC.md)
    * the language is, however, based loosely on the fundamental definition of number.

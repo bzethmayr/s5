@@ -600,8 +600,6 @@ class Executor:
             for val in (a, b):
                 if isinstance(val, SubroutineSet) and val._io_s5b:
                     self.run(val._body)
-            a = int_to_s5set(set_value(a)) if isinstance(a, SubroutineSet) else a
-            b = int_to_s5set(set_value(b)) if isinstance(b, SubroutineSet) else b
             if instr.opcode == Opcode.UNION:
                 result = a.union(b)
             elif instr.opcode == Opcode.INTERSECTION:

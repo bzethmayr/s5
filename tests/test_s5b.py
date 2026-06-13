@@ -239,6 +239,30 @@ class TestWriteS5B:
                 n_rebuilt = (n_rebuilt << 3) | c
             assert n_rebuilt == n, f"roundtrip failed for {n}: got {n_rebuilt}"
 
+    def test_extend_subroutine_via_s5b(self):
+        src1 = "Set sets Set's sets Set's sets set Set's sets"
+        instrs1 = Parser(tokenize(src1)).parse_program()
+
+        src2 = "Set sets Set's sets Set's sets set Set's sets"
+        instrs2 = Parser(tokenize(src2)).parse_program()
+
+        base_tokens = serialize_body(instrs1)
+        extra_tokens = serialize_body(instrs2)
+        all_tokens = base_tokens + extra_tokens
+        all_data = encode_tokens(all_tokens)
+
+        extended = _read_s5b(all_data)
+
+        assert isinstance(extended, SubroutineSet)
+        assert len(extended._body) == 2
+        assert extended._body[0].opcode == instrs1[0].opcode
+        assert extended._body[1].opcode == instrs2[0].opcode
+        assert extended._io_s5b
+
+        executor = Executor()
+        executor.run(extended._body)
+        assert len(executor.U) == 4
+
 
 class TestExecutorIOS5B:
     def test_read_s5b_via_stdin(self):
