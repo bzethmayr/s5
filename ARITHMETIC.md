@@ -56,19 +56,30 @@ Every subroutine's integer value equals its instruction count. Each `LineSet` el
 
 Unioning a subroutine with `ONE` (the set `{∅}`) increments its value by 1. Round-tripping through integer I/O normalizes the result to canonical form, converting the instruction count into a plain set. This is useful as a counter source or for initialization.
 
-### 2. Universe size during flat growth
+### 2. Wrap-in-union semantics
+
+The wrap address `Sets sets' X` resolves to `{value_of_X}` — a singleton set whose sole
+element is `X`'s value. But **union concatenates items**, so `U ∪ {X}` adds `value_of_X`
+itself as an element, not `{value_of_X}` as a wrapped unit. For example, if `C = {∅}` (ONE),
+then `U ∪ {C}` appends `{∅}` (not `{{∅}}`). To append `{{∅}}` (ZERO), double-wrap:
+`U ∪ {{C}}` = `Sets sets' Sets sets' C`, whose sole item is `{C}` = `{{∅}}`.
+
+This applies to all binary ops (union, intersection, difference) — they all operate
+at the **item** level of their resolved operands.
+
+### 3. Universe size during flat growth
 
 Before any subroutine definitions, every element of U is `∅`, so `set_value(U) == len(U)`. This is a natural allocation counter after initial bootstrapping doublings — no separate tracking needed.
 
-### 3. Cross-format I/O (when all else fails)
+### 4. Cross-format I/O (when all else fails)
 
 The three I/O forms (integer, byte, s5b) each produce different normalized shapes from the same value. You are not required to read in the same format you wrote — if the transforms between the three forms appeal to you, cross-format reads and writes are valid. Predicting the outcome is very, very difficult, but when sanity has betrayed you it can produce useful effects.
 
-### 4. Universe normalization (when all else fails)
+### 5. Universe normalization (when all else fails)
 
 Normalizing the universe via I/O generally won't halt the program — the transformation preserves the set's value, and halting only occurs when `len(U) == 0`. You can even normalize U to S5B form if you want. Again, predicting the output is very, very difficult.
 
-### 5. Extending subroutines via union
+### 6. Extending subroutines via union
 
 Since 0.4.3, SubroutineSets in binary-op A/B positions are no longer auto-normalized to their instruction-count value. They retain their `LineSet` items through union, intersection, and difference. This enables appending S5B-read instructions to an existing static subroutine:
 
