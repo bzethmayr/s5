@@ -6,59 +6,36 @@ C = working cache / temporary accumulator
 
 | Slot | Name     | Contents                    | Notes                                    |
 |------|----------|-----------------------------|------------------------------------------|
-| U[0] | ZERO     | `{{∅}}` — value 0, truthy  | Working zero; non-empty so it passes conditional dispatch |
+| U[0] | ZERO     | `∅` — value 0              | Empty set; ZERO ∪ ONE = {∅} = unary(1)   |
 | U[1] | ONE      | `{∅}` — value 1            | Building block for unary growth          |
-| U[2] | COUNTER  | `int_to_s5set(N)`          | Sampled before creating non-empty elements, so value == len(U) at that point |
-| U[3] | IN_A     | scratch / input A          |                                          |
-| U[4] | IN_B     | scratch / input B          |                                          |
-| U[5] | OUT      | output register            |                                          |
-| U[6] | SUCC     | successor structure        | Accessed via subset-select under U[6]    |
-| U[7] | PRED     | predecessor structure      | Accessed via subset-select under U[7]    |
+| U[2] | COUNTER  | `int_to_s5set(N)`          | Universe size after growth (32)          |
+| U[3] | IN_A     | scratch / input A          | Used by succ/pred as input               |
+| U[4] | IN_B     | scratch                    | Used by pred as IN_A save                |
+| U[5] | OUT      | output register            | Result from succ/pred calls              |
+| U[6] | SUCC     | successor structure        | [0]=NORM_SUCC, [1]=UGROWTH               |
+| U[7] | PRED     | predecessor structure      | [0]=PRED_MAIN, [1]=PRED_ADVANCE, [2]=PRED_STEP |
 
-Slots 3–7 initially hold `∅` from the growth phase (usable as empty-set element sources until overwritten).
+Slots 3–5, 8 initially hold `∅` from the growth phase.
 
 ---
 
-## init.s5 — Bootstrap
+## init.s5 — Bootstrap (9 instrs)
 
-Goal: grow U to ≥8, install ZERO, ONE, COUNTER in their slots.
+Goal: grow U to 32, install ZERO (=∅), ONE, COUNTER.
 
 ### Order
 
 1. **Save ONE before growth**: `C = U ∩ U` → preserves `{∅}`.
-2. **Grow U**: self-union until len ≥ 8 (three doublings: 1→2→4→8).
-3. **Sample COUNTER**: with `--bufsize 1` or larger, write `set_value(U)` as integer to fd 0 buffer, read back into U[2]. All elements are still `∅` at this point, so `set_value(U) == len(U)`.
-4. **Build ZERO** (`{{∅}}`): union U with `{{C}}` (double-wrapped ONE) → appends `{{∅}}` at U[len]. Copy to U[0] via `U[0] = U[len] ∩ U[len]`.
-5. **Install ONE**: `U[1] = C ∩ C`.
+2. **Grow U**: self-union ×5 (list-concat semantics: 1→2→4→8→16→32).
+3. **Write COUNTER**: `U ∩ U → IO'1` writes `set_value(U)=32` to fd 1 buffer (also prints to stdout).
+4. **Read COUNTER**: `IO'1 ∪ U[4] → U[2]` reads 32 from fd 1 buffer into U[2].
+5. **ZERO**: U[0] is already `∅` after growth — no change needed.
+6. **ONE**: `C ∩ C → U[1]` copies `{∅}` to U[1].
 
-> **Wrap-in-union semantics**: The S5 wrap address `Sets sets' X` resolves to `{value_of_X}`.
-> Union concatenates items of both operands, so `U ∪ {X}` adds `value_of_X` itself as an
-> element (e.g., `U ∪ {C}` adds `{∅}` = ONE). To add `{{∅}}` = ZERO, double-wrap:
-> `{{C}}` = `Sets sets' Sets sets' C`, whose sole item is `{C}` = `{{∅}}`.
+> **ZERO=∅ rationale**: ZERO must be `∅` (empty set) so that `ZERO ∪ ONE = {∅}` (unary value 1).
+> A non-empty ZERO like `{{∅}}` would cause `ZERO ∪ ONE = {∅, {∅}}` (unary value 2),
+> breaking the successor function.
 
-### pcode
-
-```
--- 1. save ONE before growth
-C = U ∩ U
-
--- 2. grow U to 8
-U = U ∪ U   -- len 2
-U = U ∪ U   -- len 4
-U = U ∪ U   -- len 8
-
--- 3. counter → U[2]  (requires --bufsize 1+)
-write set_value(U) as int to fd0 buffer   -- prints nothing, buffers internally
-read int from fd0 buffer → U[2]           -- reads "8\n" → int_to_s5set(8)
-
--- 4. ZERO → U[0]
-U = U ∪ {{C}}                   -- double-wrap: append {{∅}} at U[8]
-U[0] = U[8] ∩ U[8]              -- copy {{∅}} to U[0]
-
--- 5. ONE → U[1]
-U[1] = C ∩ C
-
--- 6. (optional) zero U[3..7] via self-difference if needed
 ```
 
 ---

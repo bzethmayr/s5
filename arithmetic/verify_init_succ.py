@@ -21,15 +21,13 @@ def verify():
     status = executor.run(instructions)
     assert status == "finished", f"expected finished, got {status}"
 
-    # U size
-    assert len(executor.U) == 9, f"len(U) == 9, got {len(executor.U)}"
+    # U size: 32 from growth (no double-wrap append)
+    assert len(executor.U) == 32, f"len(U) == 32, got {len(executor.U)}"
 
-    # U[0] = ZERO = {{∅}}  (value 0, non-empty, inner {∅} = non-empty)
+    # U[0] = ZERO = ∅  (value 0, empty — so ZERO ∪ ONE = {∅} = unary 1)
     zero = executor.U[0]
     assert set_value(zero) == 0, f"U[0] value != 0"
-    assert len(zero) == 1, f"U[0] len != 1"
-    assert len(zero[0]) == 1, f"U[0][0] should be {{∅}}"
-    assert len(zero[0][0]) == 0, f"U[0][0][0] should be ∅"
+    assert len(zero) == 0, f"U[0] should be ∅, got {zero}"
 
     # U[1] = ONE = {∅}  (value 1)
     one = executor.U[1]
@@ -37,21 +35,20 @@ def verify():
     assert len(one) == 1, f"U[1] len != 1"
     assert len(one[0]) == 0, f"U[1][0] not empty"
 
-    # U[2] = COUNTER = int_to_s5set(8)  (value 8, since 8 empty elements after 3 doublings)
+    # U[2] = COUNTER = int_to_s5set(32)  (value 32, from 5 doublings)
     counter = executor.U[2]
-    assert set_value(counter) == 8, f"U[2] value != 8, got {set_value(counter)}"
+    assert set_value(counter) == 32, f"U[2] value != 32, got {set_value(counter)}"
 
-    # U[6] = SUCC structure with 2 subroutines
-    assert len(executor.U[6]) == 2, f"U[6] len != 2, got {len(executor.U[6])}"
+    # U[6] = SUCC structure with 3 subroutines (NORM_SUCC, UGROWTH, NORM)
+    assert len(executor.U[6]) == 3, f"U[6] len != 3, got {len(executor.U[6])}"
     assert isinstance(executor.U[6][0], SubroutineSet), "U[6][0] not SubroutineSet"
     assert isinstance(executor.U[6][1], SubroutineSet), "U[6][1] not SubroutineSet"
-
-    # U[8] = leftover ZERO from double-wrap (same as U[0])
-    assert executor.U[8] == zero, "U[8] != U[0]"
+    assert isinstance(executor.U[6][2], SubroutineSet), "U[6][2] not SubroutineSet"
 
     # Subroutine body lengths
     assert len(executor.U[6][0]._body) == 5, f"NORM_SUCC body != 5, got {len(executor.U[6][0]._body)}"
     assert len(executor.U[6][1]._body) == 6, f"UGROWTH body != 6, got {len(executor.U[6][1]._body)}"
+    assert len(executor.U[6][2]._body) == 5, f"NORM body != 5, got {len(executor.U[6][2]._body)}"
 
     # Quick smoke test: call NORM_SUCC with ONE, expect TWO
     executor2 = Executor(buf_sizes={0: 64, 1: 64, 2: 64})
