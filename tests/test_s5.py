@@ -451,3 +451,126 @@ class TestSubrValue:
         norm = int_to_s5set(4)
         with_suffix = base.union(norm)
         assert set_value(with_suffix) == 12
+
+
+_EMPTY = S5Set()
+_NONEMPTY = S5Set([_EMPTY])
+
+
+class TestSubsetSelectIndirect:
+    def test_direct_still_works(self):
+        src = (
+            "Set sets Set's sets Set's sets set Set's set\n"
+            "Set Sets set sets' set"
+        )
+        exec = Executor()
+        status = exec.run(Parser(tokenize(src)).parse_program())
+        assert status == "finished"
+        assert exec.C == S5Set()
+
+    def test_indirect_via_u(self):
+        exec = Executor()
+        exec.C = S5Set([_EMPTY, _NONEMPTY])          # len=2
+        instr = Instruction(Opcode.SUBSET_SELECT, addr_b=Address(AddressType.U))
+        exec.exec_instruction(instr)
+        # value(U) = value({∅}) = 1 → C = C[1] = {∅}
+        assert exec.C == _NONEMPTY
+
+    def test_indirect_via_c(self):
+        exec = Executor()
+        exec.C = S5Set([_NONEMPTY, _EMPTY])           # { {∅}, ∅ }, value = 0→×2=0→+1=1, len=2
+        instr = Instruction(Opcode.SUBSET_SELECT, addr_b=Address(AddressType.C))
+        exec.exec_instruction(instr)
+        # value(C) = 1 → C = C[1] = ∅
+        assert exec.C == _EMPTY
+
+    def test_indirect_via_derived(self):
+        exec = Executor()
+        exec.C = S5Set([_NONEMPTY, _EMPTY])           # C = { {∅}, ∅ }
+        exec.U = S5Set([_EMPTY, _NONEMPTY])           # U = { ∅, {∅} }
+        # Index from C[0]: value(C[0]) = value({∅}) = 1
+        instr = Instruction(Opcode.SUBSET_SELECT, addr_b=Address(AddressType.DERIVED, index=0))
+        exec.exec_instruction(instr)
+        assert exec.C == _EMPTY                       # C[1] = ∅
+
+    def test_indirect_via_ud(self):
+        exec = Executor()
+        exec.C = S5Set([_EMPTY, _NONEMPTY])           # len=2
+        exec.U = S5Set([_EMPTY, _NONEMPTY, _EMPTY])   # U[1] = {∅} → value = 1
+        instr = Instruction(Opcode.SUBSET_SELECT, addr_b=Address(AddressType.UD, index=1))
+        exec.exec_instruction(instr)
+        assert exec.C == _NONEMPTY                     # C[1] = {∅}
+
+    def test_indirect_via_wrap(self):
+        exec = Executor()
+        exec.C = S5Set([_EMPTY, _NONEMPTY])            # len=2
+        # wrap U into {U}; {U} = {{∅}} has value 0 (single nonempty → ×2)
+        wrap = Address(AddressType.WRAP, sub_addr=Address(AddressType.U))
+        instr = Instruction(Opcode.SUBSET_SELECT, addr_b=wrap)
+        exec.exec_instruction(instr)
+        assert exec.C == _EMPTY                        # C[0] = ∅
+
+    def test_indirect_via_depth_suffix(self):
+        exec = Executor()
+        # U = {{∅}, ∅}: value = 0→×2=0→+1=1, len=2 → dispatch through U[1]=∅
+        exec.U = S5Set([_NONEMPTY, _EMPTY])
+        exec.C = S5Set([_NONEMPTY, _EMPTY])            # len=2
+        # U with depth 2: resolve → V1=U, value(U)=1 → V2=U[1]=∅ → value=0
+        addr = Address(AddressType.U, dispatch_depth=2)
+        instr = Instruction(Opcode.SUBSET_SELECT, addr_b=addr)
+        exec.exec_instruction(instr)
+        assert exec.C == _NONEMPTY                     # C[0] = {∅}
+
+    def test_indirect_oob_from_index(self):
+        exec = Executor()
+        exec.C = S5Set([_EMPTY])                       # len=1
+        instr = Instruction(Opcode.SUBSET_SELECT, addr_b=Address(AddressType.U))
+        with pytest.raises(RuntimeError_, match="out of bounds"):
+            exec.exec_instruction(instr)
+
+    def test_parse_indirect_via_u(self):
+        src = "Set Sets set sets' Set's sets"
+        instrs = Parser(tokenize(src)).parse_program()
+        assert len(instrs) == 1
+        assert instrs[0].opcode == Opcode.SUBSET_SELECT
+        assert instrs[0].addr_b is not None
+        assert instrs[0].addr_b.type == AddressType.U
+        assert instrs[0].n is None
+
+    def test_parse_direct_integer(self):
+        src = "Set Sets set sets' set sets"
+        instrs = Parser(tokenize(src)).parse_program()
+        assert len(instrs) == 1
+        assert instrs[0].opcode == Opcode.SUBSET_SELECT
+        assert instrs[0].addr_b is None
+        assert instrs[0].n == 2
+
+    def test_parse_direct_empty_integer(self):
+        src = "Set Sets set sets'"
+        instrs = Parser(tokenize(src)).parse_program()
+        assert len(instrs) == 1
+        assert instrs[0].opcode == Opcode.SUBSET_SELECT
+        assert instrs[0].addr_b is None
+        assert instrs[0].n == 0
+
+    def test_serialize_roundtrip_indirect_u(self):
+        from s5.serialize import serialize_instruction
+        src = "Set Sets set sets' Set's sets"
+        instrs = Parser(tokenize(src)).parse_program()
+        tokens = serialize_instruction(instrs[0])
+        back = Parser(iter(tokens)).parse_program()
+        assert back[0].opcode == Opcode.SUBSET_SELECT
+        assert back[0].addr_b is not None
+        assert back[0].addr_b.type == AddressType.U
+
+    def test_pretty_roundtrip_indirect(self):
+        from s5.pretty import pretty_print
+        for src in ("Set Sets set sets' Set's sets",
+                    "Set Sets set sets' sets set's'",
+                    "Set Sets set sets' sets sets set's'"):
+            instrs = Parser(tokenize(src)).parse_program()
+            formatted = pretty_print(instrs)
+            back = Parser(tokenize(formatted.strip())).parse_program()
+            assert back[0].opcode == instrs[0].opcode
+            assert back[0].addr_b is not None
+            assert back[0].addr_b.type == instrs[0].addr_b.type

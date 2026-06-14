@@ -42,7 +42,8 @@ H = false      Halted: set when len(U) reaches 0 after an instruction
                    | <binary_operands>
                    | <subr_operands>
 
-<subset_operands> ::= "sets'" <integer>
+<subset_operands> ::= "sets'" <integer>     -- direct: C = C[N]
+                    | "sets'" <address>      -- indirect: C = C[value(addr)]
 
 <binary_operands> ::= <address> <address> "set" <address>
 
@@ -182,7 +183,7 @@ for each instruction:
     5. halt check     — if len(U) == 0: H = true, stop
 ```
 
-- **Subset-select**: `C = C[N]`, 0-indexed. Fails if C is undefined or N out of bounds.
+- **Subset-select**: `C = C[N]`, 0-indexed. Fails if C is undefined or N out of bounds. The index may be a direct integer (`sets' <integer>`) or an indirect address (`sets' <address>`), in which case the index is `set_value(resolve(<address>))`. Examples: `Set Sets set sets' Set's sets` selects C[1] since U = {∅} has value 1; `Set Sets set sets' Sets set sets' set` selects C[value(C[0])].
 - **U-element**: `U[N]` (via `Sets sets sets' <n>`) — resolves to the N-th element of U, 0-indexed. Fails if N out of bounds. Can be assigned to (via subroutine definition) or used in A/B position.
 - **Union** (`"sets"`): concatenation (duplicates preserved).
 - **Intersection** (`"Set's"`): elements of A that also appear in B (preserves A order).

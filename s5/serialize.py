@@ -47,7 +47,10 @@ def serialize_address(addr):
 def serialize_instruction(instr):
     if instr.opcode == Opcode.SUBSET_SELECT:
         tokens = [TokenType.SINGULAR, TokenType.PLURAL_CAP, TokenType.SINGULAR_LOWER, TokenType.PLURAL_APOS]
-        tokens.extend(serialize_integer(instr.n))
+        if instr.addr_b is not None:
+            tokens.extend(serialize_address(instr.addr_b))
+        else:
+            tokens.extend(serialize_integer(instr.n))
     elif instr.opcode == Opcode.UNION:
         tokens = [TokenType.SINGULAR, TokenType.PLURAL_LOWER]
         tokens.extend(serialize_address(instr.addr_a))

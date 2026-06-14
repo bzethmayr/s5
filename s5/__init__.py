@@ -112,7 +112,7 @@ def tokenize_files(file_paths):
 
 
 class Parser:
-    def __init__(self, token_stream, lookahead=2):
+    def __init__(self, token_stream, lookahead=3):
         self._it = iter(token_stream)
         self._lookahead = lookahead
         self._buf = []
@@ -201,6 +201,19 @@ class Parser:
     def parse_operands(self, opcode):
         if opcode == Opcode.SUBSET_SELECT:
             self.expect(TokenType.PLURAL_APOS)
+            t = self.peek()
+            if t is not None:
+                if t in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP, TokenType.SINGULAR_LOWER_APOS_APOS):
+                    addr = self.parse_address()
+                    return Instruction(opcode, addr_b=addr)
+                if t == TokenType.PLURAL_LOWER:
+                    t1 = self.peek(1)
+                    if t1 == TokenType.SINGULAR_LOWER_APOS_APOS:
+                        addr = self.parse_address()
+                        return Instruction(opcode, addr_b=addr)
+                    if t1 == TokenType.PLURAL_LOWER and self.peek(2) == TokenType.SINGULAR_LOWER_APOS_APOS:
+                        addr = self.parse_address()
+                        return Instruction(opcode, addr_b=addr)
             n = self._parse_integer()
             return Instruction(opcode, n=n)
         elif opcode == Opcode.SUBR:
@@ -568,9 +581,14 @@ class Executor:
         if instr.opcode == Opcode.SUBSET_SELECT:
             if self.C is None:
                 raise RuntimeError_("cannot subset-select: C is undefined")
-            if instr.n >= len(self.C):
-                raise RuntimeError_(f"C[{instr.n}] out of bounds (len={len(self.C)})")
-            self.C = self.C[instr.n]
+            if instr.addr_b is not None:
+                idx_val = self.resolve(instr.addr_b)
+                idx = set_value(idx_val)
+            else:
+                idx = instr.n
+            if idx >= len(self.C):
+                raise RuntimeError_(f"C[{idx}] out of bounds (len={len(self.C)})")
+            self.C = self.C[idx]
             self._check_halt()
         elif instr.opcode == Opcode.SUBR and instr.subr_body is not None:
             lines = tuple(LineSet(inst) for inst in instr.subr_body)
