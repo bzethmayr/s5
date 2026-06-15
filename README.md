@@ -28,7 +28,7 @@ H = false      Halted: set when len(U) reaches 0 after an instruction
 ## Grammar
 
 ```
-<program>        ::= <instruction>*
+<program>        ::= (<instruction> | <definition>)*
 
 <instruction>    ::= "Set" <opcode> [<operands>]
 
@@ -50,13 +50,13 @@ H = false      Halted: set when len(U) reaches 0 after an instruction
 <subr_operands>   ::= [<address>]
                    | "set" <address> [<address>]
 
-<address>        ::= <base_addr>
-                    | <derived_addr>
-                    | <ud_addr>
-                    | <wrap_addr>
-                    | <io_addr>
-                    | <byte_io_addr>
-                    | <s5b_io_addr>
+<address>        ::= <base_addr> ["sets'" <integer>]
+                   | <derived_addr> ["sets'" <integer>]
+                   | <ud_addr> ["sets'" <integer>]
+                   | <wrap_addr> ["sets'" <integer>]
+                   | <io_addr> ["sets'" <integer>]
+                   | <byte_io_addr> ["sets'" <integer>]
+                   | <s5b_io_addr> ["sets'" <integer>]
 
 <base_addr>      ::= "Set's" "sets"       -- Universe U
                    | "Set's" "set"        -- Cache C
@@ -72,16 +72,14 @@ H = false      Halted: set when len(U) reaches 0 after an instruction
 <s5b_io_addr>    ::= "sets" "sets" "set's'"   -- s5b I/O
 
 <integer>        ::= ("set" | "sets")*    -- mixed-unary: set=+1, sets=×2
+
+<definition>     ::= "Sets'" "Sets'" [<address>] <instruction>+ "Sets'"
 ```
 
 ### Dispatch depth
 
 Any address may carry an optional **dispatch depth** suffix encoded as `sets'` followed by a
 mixed-unary integer. The integer encodes the number of extra resolution steps (default 0):
-
-```
-<dispatched_addr> ::= <address> ["sets'" <integer>]
-```
 
 Actual depth = `1 + integer_value`, so `sets' set` = depth 2, `sets' set sets` = depth 3, etc.
 The suffix is backward-compatible: no suffix means depth 1 (static/single dispatch).
