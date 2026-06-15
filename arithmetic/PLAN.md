@@ -12,10 +12,17 @@ C = working cache / temporary accumulator
 | U[3] | IN_A     | scratch / input A          | Used by succ/pred as input               |
 | U[4] | IN_B     | scratch                    | Used by pred as IN_A save                |
 | U[5] | OUT      | output register            | Result from succ/pred calls              |
-| U[6] | SUCC     | successor structure        | [0]=NORM_SUCC, [1]=UGROWTH               |
+| U[6] | SUCC     | successor structure        | [0]=NORM_SUCC, [1]=UGROWTH, [2]=NORM     |
 | U[7] | PRED     | predecessor structure      | [0]=PRED_MAIN, [1]=PRED_ADVANCE, [2]=PRED_STEP |
+| U[8] | pred scratch | scratch for pred search | Used internally by PRED_MAIN            |
+| U[11]| V        | build loop counter         | Iterates 0..COUNTER-1 during LUT build   |
+| U[12]| PRED1    | pred1 build subroutines    | [0]=PRED1_BUILD, [1]=LUT_BUILD_LOOP      |
+| U[13]| scratch  | scratch (COND)             | Conditional temp during LUT build        |
+| U[14]| bound    | loop bound                 | Copy of COUNTER for loop termination     |
+| U[15]| ∅ source | empty source               | Zeros C via diff                         |
+| U[16]| LUT      | pred LUT data              | pred(0)..pred(COUNTER-1), pure S5Set     |
 
-Slots 3–5, 8 initially hold `∅` from the growth phase.
+Slots 3–5, 8, 9–15 initially hold `∅` from the growth phase.
 
 ---
 
@@ -115,17 +122,24 @@ U[6] = U[6] ∪ {C}
 | U[4] | VIRT_B   | Scratch for building pred structure         | Scratch       |
 | U[5] | VIRT_D   | Scratch for building pred structure         | Scratch       |
 
-### Pred entry point: U[7][0]
+### Pred entry points
 
-The predecessor function is stored as a subroutine under `U[7][0]`. Called via:
+**O(1) LUT path (recommended, after pred1.s5 runs):**
+
+```
+C = U[16]        -- load LUT data
+C = C[value(addr)]  -- indirected subset-select: addr = runtime query
+```
+
+**Search-based fallback (pred.s5, U[7][0]):**
 
 ```
 C = U[7]         -- load PRED structure
-C = C[0]         -- select pred subroutine
+C = C[0]         -- select PRED_MAIN subroutine
 Set Sets'        -- invoke it
 ```
 
-Internally it uses `U[7][1..]` for any helper subroutines (equality test, succ call, loop body).
+Internally U[7][0] uses `U[7][1..]` for helper subroutines (equality test, succ call, loop body).
 
 ### Strategy
 
@@ -139,22 +153,19 @@ Approaches:
 
 **3. LUT-based pred** — for small values, precompute and look up.
 
-### pcode (search-based variant)
+### LUT-based O(1) variant via indirected subset-select
+
+Once the LUT is built in U[16] (by `pred1.s5`), runtime predecessor is O(1):
 
 ```
--- U[7][0] = pred search
--- Given value V in IN_A (U[3]):
---   test = U[0]          (ZERO, value 0)
---   prev = U[0]          (ZERO)
---   while test ≠ V:
---     prev = test
---     test = succ(test)   (call U[6][0] = NORM_SUCC)
---   OUT = prev
+-- Load LUT, index with IN_A, result in C
+C = U[16]
+C = C[value(IN_A)]       -- indirected subset-select → pred(IN_A)
 ```
 
-This requires conditional dispatch (test emptiness after difference), equality test (difference-with-self to get empty when equal), and calling the succ function under U[6][0].
+This requires no subroutine call, no loop, no I/O — just two instructions.
 
-### Subroutines under U[7]
+### pcode (search-based variant, fallback for unbuilt LUT)
 
 | Slot       | Name      | Purpose                                          |
 |------------|-----------|--------------------------------------------------|
@@ -169,33 +180,39 @@ This requires conditional dispatch (test emptiness after difference), equality t
 
 ---
 
-## S5B for dynamic operations
+## Indirected subset-select (0.5.x)
 
-### exec-style use
-
-S5B input reads a token stream, parses it into a `SubroutineSet` with `io_s5b=True`, then auto-executes when used as a binary operand. This lets us:
-
-- **Load callable code at runtime**: construct S5B bytes externally, pipe into stdin, read via `set sets set's'` in A/B position, union with anything → body executes.
-- **Bypass static subset-select limits**: dynamic indices or variable-length sequences are achievable by compiling to S5B externally rather than encoding in s5.
-
-### Extending existing subroutines
-
-The S5B encode path serializes instruction token lists into byte pairs. Appending new instruction tokens before encoding produces an extended token stream. Reading it back yields a `SubroutineSet` with the combined body.
-
-**End-marker note**: naive byte concatenation of two encoded S5B streams won't work — `decode_tokens` stops at the end-of-stream marker (odd token count signaled by bit 7). To extend, combine the *token lists* (e.g., `serialize_body(instrs_a) + serialize_body(instrs_b)`) then `encode_tokens` the result.
-
-### Test: `test_extend_subroutine_via_s5b` — PASSED
-
-In `tests/test_s5b.py::TestWriteS5B`:
+Version 0.5.x added **indirected (dynamic) subset-select**: `C = C[value(<address>)]`.
 
 ```
-1. Parse instruction stream X ("double U")
-2. Parse instruction stream Y ("double U")
-3. Combine: serialize_body(X) + serialize_body(Y)
-4. Encode combined tokens → S5B bytes
-5. _read_s5b → SubroutineSet with len(body) == 2
-6. Execute body → U doubled twice: len(U) == 4
+Set Sets set sets' <address>
 ```
+
+The index is computed at runtime by resolving `<address>` and taking `set_value()` of the result.
+This eliminates the need for S5B I/O to construct dynamic indices — any runtime value can be used
+as a subset-select index directly.
+
+### Impact on LUT construction
+
+For `pred1.s5`, this means:
+
+- **Build phase**: fill U[16] with `pred(0)` through `pred(COUNTER-1)` (same iterative process,
+  calling PRED_MAIN for each V).
+- **Runtime O(1) access** (new): once the LUT is built, any runtime query Q resolves in a single
+  indirected subset-select:
+
+```
+C = U[16]              -- load LUT
+C = C[value(IN_A)]     -- indirected subset-select → O(1) pred(Q)
+```
+
+This replaces calling PRED_MAIN (search-based, O(n)) for each runtime query. The LUT at U[16] is a
+pure data set (no subroutines) and can be copied to any other U slot for reuse.
+
+### Slot impact
+
+No new slots needed — U[16] already holds the LUT data, and the indirected subset-select uses
+existing registers (IN_A for query, C for LUT load + select).
 
 ---
 
@@ -204,5 +221,6 @@ In `tests/test_s5b.py::TestWriteS5B`:
 1. ~~Write and verify `test_s5b_extend_subroutine` (prove S5B extension works)~~ — DONE, PASSES
 2. ~~Write `init.s5` with documented `--bufsize` requirement~~ — DONE, VERIFIED
 3. ~~Write `succ.s5` — start with unary+normalized variants~~ — DONE, VERIFIED
-4. Write `pred.s5` — search-based, entry at U[7][0], scratch in U[3..5]
-5. Verify end-to-end: init → succ → pred round-trips
+4. ~~Write `pred.s5` — search-based, entry at U[7][0], scratch in U[3..5]~~ — DONE, VERIFIED
+5. ~~Write `pred1.s5` — build LUT in U[16] for O(1) runtime access via indirected subset-select~~ — DONE, VERIFIED
+6. Verify end-to-end: init → succ → pred → pred1 → demo round-trips — DONE, ALL 24 TESTS PASS

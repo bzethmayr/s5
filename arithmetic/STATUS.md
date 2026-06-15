@@ -15,7 +15,7 @@ All 24 tests pass (`arithmetic/test_arithmetic.py`).
 |------|------|---------|
 | `init.s5` | — | Bootstrap: grow U to 32, set ZERO, ONE, COUNTER (U[2]=32) |
 | `succ.s5` | U[6] | 3 subroutines: NORM_SUCC, UGROWTH, NORM |
-| `pred.s5` | U[7] | Search-based PRED_MAIN + helpers (unchanged, still the runtime pred) |
+| `pred.s5` | U[7] | Search-based PRED_MAIN + helpers (scratch in U[8], initialized per call) |
 | `pred1.s5` | U[12] build / U[16] data | Builds LUT in U[16] for all 0..COUNTER-1 via PRED_MAIN |
 | `demo.s5` | U[13] | Reads Q from stdin, outputs pred(Q) via PRED_MAIN |
 

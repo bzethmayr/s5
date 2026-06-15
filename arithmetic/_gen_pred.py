@@ -1,4 +1,7 @@
-"""Generate pred.s5 — search-based predecessor under U[7]."""
+"""Generate pred.s5 — search-based predecessor under U[7].
+
+Scratch (prev) lives at U[8] — initialized to ZERO on every PRED_MAIN call.
+"""
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -10,11 +13,11 @@ def C():   return Address(AddressType.C)
 def UD(idx): return Address(AddressType.UD, index=idx)
 def WRAP(addr): return Address(AddressType.WRAP, sub_addr=addr)
 
-def union(a, b, d):
+def union_(a, b, d):
     return Instruction(Opcode.UNION, addr_a=a, addr_b=b, addr_dest=d)
-def intersection(a, b, d):
+def inters(a, b, d):
     return Instruction(Opcode.INTERSECTION, addr_a=a, addr_b=b, addr_dest=d)
-def diff(a, b, d):
+def diff_(a, b, d):
     return Instruction(Opcode.DIFFERENCE, addr_a=a, addr_b=b, addr_dest=d)
 def subset(n):
     return Instruction(Opcode.SUBSET_SELECT, n=n)
@@ -24,45 +27,44 @@ def subr_call(loc=None, cond=None):
     return Instruction(Opcode.SUBR, addr_a=loc, addr_b=cond)
 
 # PRED_MAIN (U[7][0]): save IN_A, init test/prev, call PRED_ADVANCE
-# If IN_A is ∅, skip loop and return ZERO (prev is already ZERO from init).
 pred_main = [
-    intersection(UD(3), UD(3), UD(4)),  # U[4] = save IN_A
-    intersection(UD(0), UD(0), UD(3)),  # test = ZERO
-    intersection(UD(0), UD(0), UD(8)),  # prev = ZERO (U[8] scratch)
-    intersection(UD(7), UD(7), C()),    # C = U[7]
-    subset(1),                          # C = C[1] = PRED_ADVANCE
-    subr_call(cond=UD(4)),             # if IN_A non-empty: call C (PRED_ADVANCE)
-    intersection(UD(8), UD(8), UD(5)),  # OUT = prev (fallthrough for IN_A=∅)
+    inters(UD(3), UD(3), UD(4)),  # U[4] = save IN_A
+    inters(UD(0), UD(0), UD(3)),  # test = ZERO
+    inters(UD(0), UD(0), UD(8)),  # prev = ZERO (U[8] scratch)
+    inters(UD(7), UD(7), C()),    # C = U[7]
+    subset(1),                     # C = C[1] = PRED_ADVANCE
+    subr_call(cond=UD(4)),        # if IN_A non-empty: call PRED_ADVANCE
+    inters(UD(8), UD(8), UD(5)),  # OUT = prev
 ]
 
 # PRED_ADVANCE (U[7][1]): if test!=IN_A call PRED_STEP; else set OUT=prev
 pred_advance = [
-    diff(WRAP(UD(3)), WRAP(UD(4)), UD(5)),  # COND
-    intersection(UD(7), UD(7), C()),          # C = U[7]
-    subset(2),                                # C = C[2] = PRED_STEP
-    subr_call(cond=UD(5)),                   # if COND: call C
-    intersection(UD(8), UD(8), UD(5)),       # OUT = prev
+    diff_(WRAP(UD(3)), WRAP(UD(4)), UD(5)),  # COND = {test} \ {saved_IN_A}
+    inters(UD(7), UD(7), C()),                # C = U[7]
+    subset(2),                                 # C = C[2] = PRED_STEP
+    subr_call(cond=UD(5)),                    # if COND: call PRED_STEP
+    inters(UD(8), UD(8), UD(5)),              # OUT = prev
 ]
 
 # PRED_STEP (U[7][2]): prev=test, test=succ(test), recurse
 pred_step = [
-    intersection(UD(3), UD(3), UD(8)),  # prev = test
-    intersection(UD(6), UD(6), C()),     # C = U[6]
-    subset(0),                           # C = C[0] = NORM_SUCC
-    subr_call(),                         # call succ → U[5]=result
-    intersection(UD(5), UD(5), UD(3)),  # test = result
-    intersection(UD(7), UD(7), C()),    # C = U[7]
-    subset(1),                           # C = C[1] = PRED_ADVANCE
-    subr_call(),                         # call PRED_ADVANCE
+    inters(UD(3), UD(3), UD(8)),  # prev = test
+    inters(UD(6), UD(6), C()),     # C = U[6]
+    subset(0),                     # C = C[0] = NORM_SUCC
+    subr_call(),                   # call succ → U[5] = result
+    inters(UD(5), UD(5), UD(3)),  # test = result
+    inters(UD(7), UD(7), C()),    # C = U[7]
+    subset(1),                     # C = C[1] = PRED_ADVANCE
+    subr_call(),                   # call PRED_ADVANCE
 ]
 
 instrs = []
 instrs.append(subr_decl(pred_main))
-instrs.append(union(UD(7), WRAP(C()), UD(7)))
+instrs.append(union_(UD(7), WRAP(C()), UD(7)))
 instrs.append(subr_decl(pred_advance))
-instrs.append(union(UD(7), WRAP(C()), UD(7)))
+instrs.append(union_(UD(7), WRAP(C()), UD(7)))
 instrs.append(subr_decl(pred_step))
-instrs.append(union(UD(7), WRAP(C()), UD(7)))
+instrs.append(union_(UD(7), WRAP(C()), UD(7)))
 
 out = pretty_print(instrs)
 print(out)

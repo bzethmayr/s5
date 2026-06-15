@@ -128,6 +128,7 @@ class TestPredStructure:
         assert len(ex.U[7]) == 3
         for i in range(3):
             assert isinstance(ex.U[7][i], SubroutineSet), f"U[7][{i}] not SubroutineSet"
+        assert isinstance(ex.U[8], S5Set), "U[8] should be scratch data (S5Set), not SubroutineSet"
 
     def test_pred_main_body_len(self):
         ex = _run_setup()
