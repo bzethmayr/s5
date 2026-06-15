@@ -57,11 +57,12 @@ class IOHandler:
             line = self._read_line(fd)
             if line is None:
                 if fd == 0:
-                    line = sys.stdin.readline()
+                    while True:
+                        line = sys.stdin.readline()
+                        if line:
+                            break
                 else:
                     raise RuntimeError_(f"input: fd {fd} buffer empty")
-            if not line:
-                raise RuntimeError_("input: unexpected EOF")
             try:
                 n = int(line.strip())
             except ValueError:
@@ -71,19 +72,21 @@ class IOHandler:
             raw = self._read_all(fd)
             if raw is None:
                 if fd == 0:
-                    raw = sys.stdin.buffer.read()
+                    while True:
+                        raw = sys.stdin.buffer.read()
+                        if raw:
+                            break
                 else:
                     raise RuntimeError_(f"input: fd {fd} buffer empty")
-            if not raw:
-                raise RuntimeError_("input: unexpected EOF")
             return _read_s5b(raw)
         else:
             byte = self._read_byte(fd)
             if byte is None:
                 if fd == 0:
-                    raw = sys.stdin.buffer.read(1)
-                    if not raw:
-                        raise RuntimeError_("input: unexpected EOF")
+                    while True:
+                        raw = sys.stdin.buffer.read(1)
+                        if raw:
+                            break
                     byte = raw[0]
                 else:
                     raise RuntimeError_(f"input: fd {fd} buffer empty")

@@ -463,23 +463,26 @@ class Executor:
         elif addr.type == AddressType.IO_BYTE:
             if addr.has_depth:
                 return self._io.resolve(AddressType.IO_BYTE, addr.dispatch_depth - 1)
-            byte = sys.stdin.buffer.read(1)
-            if not byte:
-                raise RuntimeError_("input: unexpected EOF")
+            while True:
+                byte = sys.stdin.buffer.read(1)
+                if byte:
+                    break
             return int_to_s5set(byte[0])
         elif addr.type == AddressType.IO_S5B:
             if addr.has_depth:
                 return self._io.resolve(AddressType.IO_S5B, addr.dispatch_depth - 1)
-            raw = sys.stdin.buffer.read()
-            if not raw:
-                raise RuntimeError_("input: unexpected EOF")
+            while True:
+                raw = sys.stdin.buffer.read()
+                if raw:
+                    break
             return _read_s5b(raw)
         elif addr.type == AddressType.IO:
             if addr.has_depth:
                 return self._io.resolve(AddressType.IO, addr.dispatch_depth - 1)
-            line = sys.stdin.readline()
-            if not line:
-                raise RuntimeError_("input: unexpected EOF")
+            while True:
+                line = sys.stdin.readline()
+                if line:
+                    break
             try:
                 n = int(line.strip())
             except ValueError:
