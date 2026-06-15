@@ -153,7 +153,7 @@ class Parser:
                     self.consume()
                     loc = None
                     t2 = self.peek()
-                    if t2 in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP):
+                    if t2 in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP, TokenType.SINGULAR_LOWER_APOS_APOS, TokenType.PLURAL_LOWER):
                         loc = self.parse_address()
                     body = []
                     while self.peek() == TokenType.SINGULAR:
@@ -222,11 +222,11 @@ class Parser:
                 self.consume()
                 cond = self.parse_address()
                 subr_addr = None
-                if self.peek() in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP):
+                if self.peek() in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP, TokenType.SINGULAR_LOWER_APOS_APOS, TokenType.PLURAL_LOWER):
                     subr_addr = self.parse_address()
                 return Instruction(opcode, addr_a=subr_addr, addr_b=cond)
             loc = None
-            if t in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP):
+            if t in (TokenType.SINGULAR_APOS, TokenType.PLURAL_CAP, TokenType.SINGULAR_LOWER_APOS_APOS, TokenType.PLURAL_LOWER):
                 loc = self.parse_address()
             return Instruction(opcode, addr_a=loc)
         else:
