@@ -2,26 +2,32 @@ import argparse
 import os
 import sys
 
+_COMPILE_FALLBACK = object()
+
 from s5 import (
-    tokenize,
-    Parser,
-    Executor,
-    TokenizerError,
-    SyntaxError_,
-    RuntimeError_,
     WORD_MAP,
-    sniff,
-    encode_tokens,
+    Executor,
+    Parser,
+    RuntimeError_,
+    SyntaxError_,
+    TokenizerError,
     decode_tokens,
+    encode_tokens,
+    sniff,
+    tokenize,
 )
 
 
-def _resolve_source(path):
+def _is_our_ext(ext) -> bool:
+    return ext in (".s5", ".s5b")
+
+
+def _resolve_for_compile(path, default_ext):
     if os.path.exists(path):
         return path
     base, ext = os.path.splitext(path)
-    if ext not in (".s5", ".s5b"):
-        alt = path + ".s5"
+    if not _is_our_ext(ext):
+        alt = path + default_ext
         if os.path.exists(alt):
             return alt
     return None
@@ -29,35 +35,22 @@ def _resolve_source(path):
 
 def _compile_target_path(source_path):
     base, ext = os.path.splitext(source_path)
-    if ext in (".s5", ".s5b"):
+    if _is_our_ext(ext):
         return base + ".s5b"
     return source_path + ".s5b"
 
 
-def _do_compile(source_path):
-    src = _resolve_source(source_path)
-    if src is None:
-        print(f"s5: source not found: {source_path}", file=sys.stderr)
-        sys.exit(1)
-
-    with open(src, "rb") as f:
-        first = f.read(1)
-        if first and sniff(first[0]):
-            print(f"s5: source is already binary: {source_path}", file=sys.stderr)
-            sys.exit(1)
-
-    with open(src, encoding="utf-8-sig") as f:
-        source = f.read()
-    try:
-        tokens = list(tokenize(source))
-    except TokenizerError as e:
-        print(f"tokenizer error: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    target = _compile_target_path(src)
+def _do_compile(src_or_bin, files):
+    if src_or_bin is None:
+        src_or_bin = "out.s5b"
+    base, ext = os.path.splitext(src_or_bin)
+    src = _resolve_for_compile(src_or_bin, ".s5")
+    if src is not None:
+        files = [src] + files
+    target = _compile_target_path(src_or_bin)
     try:
         with open(target, "wb") as f:
-            f.write(encode_tokens(tokens))
+            f.write(encode_tokens(_tokenize_files_auto(files)))
     except OSError as e:
         print(f"s5: cannot write {target}: {e}", file=sys.stderr)
         sys.exit(1)
@@ -84,36 +77,57 @@ def main():
     )
     arg_parser.add_argument("--repl", action="store_true", help="force REPL mode")
     arg_parser.add_argument(
-        "-c", "--compile", type=str, default=None, metavar="FILE",
-        help="compile source to .s5b binary",
+        "-c",
+        "--compile",
+        type=str,
+        default=None,
+        const=_COMPILE_FALLBACK,
+        nargs="?",
+        metavar="FILE",
+        help="compile source(s) to .s5b binary (accepts .s5 and .s5b, auto-detected)",
     )
     arg_parser.add_argument(
-        "--pretty", "-p", action="store_true",
+        "--pretty",
+        "-p",
+        action="store_true",
         help="pretty-print parsed source to stdout",
     )
     arg_parser.add_argument(
-        "--bufsize", "-b", type=int, default=None,
-        help="set IO buffer size for all file descriptors"
+        "--bufsize",
+        "-b",
+        type=int,
+        default=None,
+        help="set IO buffer size for all file descriptors",
     )
     arg_parser.add_argument(
-        "--bufsize_0", "-b0", type=int, default=None,
-        help="set IO buffer size for stdin (fd 0)"
+        "--bufsize_0",
+        "-b0",
+        type=int,
+        default=None,
+        help="set IO buffer size for stdin (fd 0)",
     )
     arg_parser.add_argument(
-        "--bufsize_1", "-b1", type=int, default=None,
-        help="set IO buffer size for stdout (fd 1)"
+        "--bufsize_1",
+        "-b1",
+        type=int,
+        default=None,
+        help="set IO buffer size for stdout (fd 1)",
     )
     arg_parser.add_argument(
-        "--bufsize_2", "-b2", type=int, default=None,
-        help="set IO buffer size for stderr (fd 2)"
+        "--bufsize_2",
+        "-b2",
+        type=int,
+        default=None,
+        help="set IO buffer size for stderr (fd 2)",
     )
-    arg_parser.add_argument(
-        "files", nargs="*", metavar="FILE", help="S5 source files"
-    )
+    arg_parser.add_argument("files", nargs="*", metavar="FILE", help="S5 source files")
     args = arg_parser.parse_args()
 
     if args.compile is not None:
-        _do_compile(args.compile)
+        if args.compile is _COMPILE_FALLBACK:
+            _do_compile(None, args.files)
+        else:
+            _do_compile(args.compile, args.files)
         return
 
     if args.repl:
@@ -165,6 +179,7 @@ def main():
 
     if args.pretty:
         from s5.pretty import pretty_print
+
         print(pretty_print(instructions), end="")
         return
 

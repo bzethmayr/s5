@@ -96,7 +96,7 @@ it specifies a **file descriptor** (see *I/O with indirection* below).
 | `Set's sets sets' set`           | U            | 2     |
 | `Set's set sets' set sets`       | C            | 3     |
 | `Sets set sets' set sets' set`   | C[1]         | 2     |
-| `Sets sets sets' set sets' set` | U[1]         | 3     |
+| `Sets sets sets' set sets' set` | U[1]         | 2     |
 
 **R-value (read)**: resolve the address to a set V₁, then for each extra step use
 `set_value(Vᵢ)` as an index into U, yielding the next Vᵢ₊₁.
@@ -125,9 +125,9 @@ This enables indirect subroutine dispatch (store a U-index in C, then call with
 from any addressable location.
 
 In the **second** address of a binary instruction, the final `"set"` of an integer
-also serves as the instruction's separator token. Parsing uses a one-token
+also serves as the instruction's separator token. Parsing uses at minimum one-token
 lookahead: if the next token after a `"set"` would start a new address
-(`"Set's"` or `"Sets"`), the integer stops.
+(`"Set's"`, `"Sets"`, or `set's'`), the integer stops.
 
 ```
 <bounded_integer> ::= <bit> <bounded_integer>
@@ -181,7 +181,7 @@ for each instruction:
     5. halt check     — if len(U) == 0: H = true, stop
 ```
 
-- **Subset-select**: `C = C[N]`, 0-indexed. Fails if C is undefined or N out of bounds. The index may be a direct integer (`sets' <integer>`) or an indirect address (`sets' <address>`), in which case the index is `set_value(resolve(<address>))`. Examples: `Set Sets set sets' Set's sets` selects C[1] since U = {∅} has value 1; `Set Sets set sets' Sets set sets' set` selects C[value(C[0])].
+- **Subset-select**: `C = C[N]`, 0-indexed. Fails if C is undefined or N out of bounds. The index may be a direct integer (`sets' <integer>`) or an indirect address (`sets' <address>`), in which case the index is `set_value(resolve(<address>))`. Examples: `Set Sets set sets' Set's sets` selects C[1] since U = {∅} has value 1; `Set Sets set sets' Sets set sets' set` selects in C via the current value of C[1].
 - **U-element**: `U[N]` (via `Sets sets sets' <n>`) — resolves to the N-th element of U, 0-indexed. Fails if N out of bounds. Can be assigned to (via subroutine definition) or used in A/B position.
 - **Union** (`"sets"`): concatenation (duplicates preserved).
 - **Intersection** (`"Set's"`): elements of A that also appear in B (preserves A order).
@@ -201,7 +201,8 @@ A subroutine definition is a top-level construct (not an instruction):
 <definition>     ::= "Sets'" "Sets'" [<address>] <instruction>+ "Sets'"
 ```
 
-It creates a `SubroutineSet` whose elements are `LineSet` wrappers around each instruction's tokens. The subroutine is assigned to the given address (or C if omitted). The address can be any assignable target — `Set's sets` (U), `Set's set` (C), or `Sets sets sets' <n>` (U[n]). This enables first-class subroutines that can be stored at specific slots, passed around, and called.
+It creates a `SubroutineSet` whose elements are `LineSet` wrappers around each instruction's tokens. The subroutine is assigned to the given address (or C if omitted). The address can be any assignable target — 
+`Set's sets` (U), `Set's set` (C), `Sets sets sets' <n>` (U[n]), or `Sets set sets' <n>` (C[n]). This enables first-class subroutines that can be stored at specific slots, passed around, and called.
 
 ```
 Sets' Sets' Sets sets sets' set  -- assign to U[1]
@@ -341,7 +342,7 @@ Set set Set's sets Sets set sets' set sets set Set's sets  -- U = U \ C[2]
 
 Tokens: `Sets` `set` `sets'` `set` `sets` `set`
 
-After `Sets set sets'`: start integer parsing. `set` = +1 → value=1. Next is `sets` = ×2 → value=2. Next is `set` — bounded lookahead: after this `set` would `"Set's"` or `"Sets"` follow? Next token is `Set's sets` (D address). So `Set's` follows → yes, address follows → stop at the `set` without consuming. Return integer = 2.
+After `Sets set sets'`: start integer parsing. `set` = +1 → value=1. Next is `sets` = ×2 → value=2. Next is `set` — bounded lookahead: after this `set` would `"Set's"`, `"Sets"` or `set's'` follow? Next token is `Set's sets` (D address). So `Set's` follows → yes, address follows → stop at the `set` without consuming. Return integer = 2.
 
 B = C[2]. C has length 2 (indices 0,1) → runtime error: "out of bounds".
 
@@ -464,7 +465,7 @@ value 0 emits `\x00`.
 ### S5B I/O: binary token stream input and output
 
 The `sets sets set's'` address performs I/O on binary-encoded s5 token sequences
-(the `.s5b` format). Tokens are encoded in 3-bit codes, LSB-first, packed into bytes.
+(the `.s5b` format). Tokens are encoded in 3-bit codes, LSB-first, packed into bytes with a running parity bit between each token. Odd-sized streams end with 3 `0` bits followed by a _flipped_ parity bit.
 
 **Write path** (`sets sets set's'` as destination):
 
@@ -631,8 +632,9 @@ the binary bit is 1 and ×2 where it is 0.
 ## CLI
 
 ```
-usage: s5 [-h] [--pretty] [--repl] [--bufsize BUFSIZE] [--bufsize_0 BUFSIZE_0]
-          [--bufsize_1 BUFSIZE_1] [--bufsize_2 BUFSIZE_2]
+usage: s5 [-h] [--pretty] [--repl] [-c FILE] [--bufsize BUFSIZE]
+          [--bufsize_0 BUFSIZE_0] [--bufsize_1 BUFSIZE_1]
+          [--bufsize_2 BUFSIZE_2]
           [FILE ...]
 ```
 
@@ -640,6 +642,7 @@ usage: s5 [-h] [--pretty] [--repl] [--bufsize BUFSIZE] [--bufsize_0 BUFSIZE_0]
 |------|-------|-------------|-----------|
 | `--repl` | | Force REPL mode (stderr redirected to stdout) | No |
 | `--pretty` | `-p` | Pretty-print parsed source to stdout instead of executing | No |
+| `--compile FILE` | `-c FILE` | Compile source(s) to .s5b binary; accepts `.s5` (text) and `.s5b` (binary) sources, auto-detected. The `-c` argument is the output path; additional source files can follow as positional arguments and are concatenated in order | No |
 | `--bufsize N` | `-b N` | Set IO buffer size for all file descriptors (default: 0) | Yes |
 | `--bufsize_0 N` | `-b0 N` | Set IO buffer size for stdin / fd 0 | No |
 | `--bufsize_1 N` | `-b1 N` | Set IO buffer size for stdout / fd 1 | No |
@@ -648,6 +651,13 @@ usage: s5 [-h] [--pretty] [--repl] [--bufsize BUFSIZE] [--bufsize_0 BUFSIZE_0]
 Buffer size 0 means no data is retained; writes to an output descriptor still reach the
 real file descriptor, but reads from it will return empty (or for fd 0, fall through to
 real stdin). Non-zero sizes retain only the tail (last N bytes) of writes.
+
+When `--compile` is used, the output path is derived from the `-c` argument
+(extension replaced with `.s5b`). If `-c` is given without a FILE argument,
+positional source files are compiled to `out.s5b`. Files are auto-detected: if the first byte looks like a binary token stream
+it is decoded via `decode_tokens`, otherwise the file is read as UTF-8 text and tokenized
+via `WORD_MAP`. This makes it possible to combine text `.s5` and binary `.s5b` sources
+into a single output binary.
 
 The `--pretty` flag parses the source and prints it back with one instruction per line,
 subroutine definitions (`Sets' Sets' ... Sets'`) on their own lines, and subroutine

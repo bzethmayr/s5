@@ -27,6 +27,7 @@ def extract_cells(line: str) -> list[str]:
 
 
 def inline(text: str) -> str:
+    text = text.replace("{{", "{ {")
     text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
     text = re.sub(r"\*\*(.+?)\*\*", r"'''\1'''", text)
     text = re.sub(r"\*(.+?)\*", r"''\1''", text)
