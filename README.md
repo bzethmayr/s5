@@ -1,6 +1,6 @@
 # S₅ — The Set-Only Language
 
-Every token is a form of `"set"`. All computation is over ordered sets of sets. Thus, we combine the clarity of the word "set" with the practicality of number theory.
+Every token is a form of `"set"` (i.e., matches `/[Ss]et'?s?'?/`). All computation is over ordered sets of sets. Thus, we combine the clarity of the word "set" with the practicality of number theory.
 
 ## Tokens
 
