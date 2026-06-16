@@ -13,8 +13,8 @@ A clear and concise description of what the bug is.
 **To Reproduce**
 Steps to reproduce the behavior:
 1. The input program (if any)
-2. The integer inputs (if any)
-3. The integer outputs (if any)
+2. The inputs (if any)
+3. The outputs (if any)
 4. The result (if any)
 
 **Expected behavior**
