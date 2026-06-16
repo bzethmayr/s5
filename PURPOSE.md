@@ -9,6 +9,7 @@ Minor features:
    1. in the opposite direction,
    2. ignored, or
    3. been replaced with a lose/lose situation.
+      1. We did allow for more than one simultaneous `O(1)` LUT to exist but it was hard-fought.
 * Exponential reasoning difficulty
 * Whitespace-agnostic
    * but go ahead and indent whatever you like
