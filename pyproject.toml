@@ -5,6 +5,12 @@ description = "The Set-Only Language"
 authors = []
 readme = "README.md"
 
+[[tool.poetry.packages]]
+include = "s5"
+
+[[tool.poetry.packages]]
+include = "tools"
+
 [tool.poetry.scripts]
 s5 = "s5.__main__:main"
 md-to-mw = "tools.md_to_mw:main"
