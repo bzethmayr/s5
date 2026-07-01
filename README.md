@@ -667,3 +667,6 @@ The `--pretty` flag parses the source and prints it back with one instruction pe
 subroutine definitions (`Sets' Sets' ... Sets'`) on their own lines, and subroutine
 bodies indented. This produces a canonical formatted view of any valid s5 program,
 useful for reading or diffing.
+
+## Quine
+I dare you to try this.
