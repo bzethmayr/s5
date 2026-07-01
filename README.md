@@ -24,8 +24,8 @@ It may help to use the following mental model - Set has at least one set and the
 ## Initial state
 
 ```
-U = {∅}        Universe: a set containing exactly the empty set
-C = undefined  Cache: unbound until first assignment
+U = {∅}        Universe (Set's sets): a set containing exactly the empty set
+C = undefined  Cache (Set's set): unbound until first assignment
 H = false      Halted: set when len(U) reaches 0 after an instruction
 ```
 
