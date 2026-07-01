@@ -2,7 +2,9 @@
 
 Every token is a form of `"set"` (i.e., matches `/[Ss]et'?s?'?/`). All computation is over ordered sets of sets. Thus, we combine the clarity of the word "set" with the practicality of number theory.
 
-## Tokens
+It may help to use the following mental model - Set has at least one set and the set of sets that are Set's sets includes all sets - unless Set's sets contains no sets at which point, the program halts. Set's sets can contain sets of Set's sets, setters of sets of Set's sets, or sets set by setters in Set's set (or somewhere in one of those sets' sets).
+
+## Eight tokens<sup>*</sup>
 
 | Token     | Kind                                        |
 |-----------|---------------------------------------------|
@@ -16,6 +18,8 @@ Every token is a form of `"set"` (i.e., matches `/[Ss]et'?s?'?/`). All computati
 | `set's'`  | integer I/O address                          |
 | `sets set's'` | byte I/O address (2 tokens - "0" prefix) |
 | `sets sets set's'` | s5b I/O address (3 tokens - "00" prefix) |
+
+\* this is probably not a brainf*ck derivative.
 
 ## Initial state
 
