@@ -1,3 +1,4 @@
+from collections import deque
 import sys
 
 
@@ -78,7 +79,7 @@ class Instruction:
         self.subr_body = subr_body
 
 
-class TokenizerError(Exception):
+class TokenizerError_(Exception):
     pass
 
 
@@ -95,7 +96,7 @@ def tokenize(source):
     for word in source.split():
         token = WORD_MAP.get(word)
         if token is None:
-            raise TokenizerError(f"unknown token: {word!r}")
+            raise TokenizerError_(f"unknown token: {word!r}")
         tokens.append(token)
     return tokens
 
@@ -107,7 +108,7 @@ def tokenize_files(file_paths):
                 for word in line.split():
                     token = WORD_MAP.get(word)
                     if token is None:
-                        raise TokenizerError(f"unknown token: {word!r}")
+                        raise TokenizerError_(f"unknown token: {word!r}")
                     yield token
 
 
@@ -115,7 +116,7 @@ class Parser:
     def __init__(self, token_stream, lookahead=3):
         self._it = iter(token_stream)
         self._lookahead = lookahead
-        self._buf = []
+        self._buf = deque()
         self._refill()
 
     def _refill(self):
@@ -133,7 +134,7 @@ class Parser:
     def consume(self):
         if not self._buf:
             raise SyntaxError_("unexpected end of input")
-        t = self._buf.pop(0)
+        t = self._buf.popleft()
         self._refill()
         return t
 
@@ -429,12 +430,11 @@ class SubroutineSet(S5Set):
 
 class Executor:
     def __init__(self, buf_sizes=None):
+        from s5.io_handler import IOHandler
         self.U = S5Set([S5Set()])
         self.C = None
         self.halted = False
         self._io = IOHandler(buf_sizes=buf_sizes)
-
-
 
     def _resolve_base(self, addr):
         if addr.type == AddressType.U:
@@ -639,12 +639,14 @@ class Executor:
 
 
 def _read_s5b(data):
+    from s5.binary import decode_tokens
     tokens = list(decode_tokens(data))
     instructions = Parser(tokens).parse_program()
     return SubroutineSet(instructions, [LineSet(i) for i in instructions], io_s5b=True)
 
 
 def _write_s5b(value):
+    from s5.binary import encode_tokens, CODE_TO_TOKEN
     if isinstance(value, SubroutineSet):
         from s5.serialize import serialize_body
         tokens = serialize_body(value._body)
@@ -658,8 +660,6 @@ def _write_s5b(value):
     return bytes(encode_tokens(tokens))
 
 
-from s5.io_handler import IOHandler
-
-from s5.binary import encode_tokens, decode_tokens, sniff, CODE_TO_TOKEN
-
-from s5.cli import main
+# Re-exports placed after class definitions to avoid circular imports with s5.binary.
+from s5.binary import encode_tokens, decode_tokens, sniff, CODE_TO_TOKEN  # noqa: E402,F401
+from s5.cli import main  # noqa: E402,F401

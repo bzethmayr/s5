@@ -1,4 +1,4 @@
-from s5 import TokenType, TokenizerError
+from s5 import TokenType, TokenizerError_
 
 TOKEN_TO_CODE = {
     TokenType.SINGULAR: 0,
@@ -37,13 +37,13 @@ def unpack_pair(byte):
     code1 = byte & 0x7
     parity1 = (byte >> 3) & 1
     if _even_parity(code1) != parity1:
-        raise TokenizerError("parity mismatch in first token")
+        raise TokenizerError_("parity mismatch in first token")
     code2 = (byte >> 4) & 0x7
     parity2 = (byte >> 7) & 1
     if code2 == 0 and parity2 == 1:
         return CODE_TO_TOKEN[code1], None
     if _even_parity(code2) != parity2:
-        raise TokenizerError("parity mismatch in second token")
+        raise TokenizerError_("parity mismatch in second token")
     return CODE_TO_TOKEN[code1], CODE_TO_TOKEN[code2]
 
 

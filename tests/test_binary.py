@@ -9,7 +9,7 @@ from s5 import (
     Executor,
     Parser,
     S5Set,
-    TokenizerError,
+    TokenizerError_,
     TokenType,
     decode_tokens,
     encode_tokens,
@@ -144,12 +144,12 @@ class TestSniff:
 class TestDecodeErrors:
     def test_parity_error_first_token(self):
         bad = bytes([0x01])
-        with pytest.raises(TokenizerError, match="parity mismatch in first token"):
+        with pytest.raises(TokenizerError_, match="parity mismatch in first token"):
             list(decode_tokens(bad))
 
     def test_parity_error_second_token(self):
         bad = bytes([0x20])
-        with pytest.raises(TokenizerError, match="parity mismatch in second token"):
+        with pytest.raises(TokenizerError_, match="parity mismatch in second token"):
             list(decode_tokens(bad))
 
 

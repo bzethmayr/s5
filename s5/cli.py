@@ -10,7 +10,7 @@ from s5 import (
     Parser,
     RuntimeError_,
     SyntaxError_,
-    TokenizerError,
+    TokenizerError_,
     decode_tokens,
     encode_tokens,
     sniff,
@@ -67,7 +67,7 @@ def _tokenize_files_auto(paths):
             for word in text.split():
                 token = WORD_MAP.get(word)
                 if token is None:
-                    raise TokenizerError(f"unknown token: {word!r}")
+                    raise TokenizerError_(f"unknown token: {word!r}")
                 yield token
 
 
@@ -157,13 +157,13 @@ def main():
         if raw and sniff(raw[0]):
             try:
                 token_stream = list(decode_tokens(raw))
-            except TokenizerError as e:
+            except TokenizerError_ as e:
                 print(f"tokenizer error: {e}", file=sys.stderr)
                 sys.exit(1)
         else:
             try:
                 token_stream = tokenize(raw.decode("utf-8-sig"))
-            except TokenizerError as e:
+            except TokenizerError_ as e:
                 print(f"tokenizer error: {e}", file=sys.stderr)
                 sys.exit(1)
 
@@ -173,7 +173,7 @@ def main():
     except SyntaxError_ as e:
         print(f"syntax error: {e}", file=sys.stderr)
         sys.exit(1)
-    except TokenizerError as e:
+    except TokenizerError_ as e:
         print(f"tokenizer error: {e}", file=sys.stderr)
         sys.exit(1)
 
