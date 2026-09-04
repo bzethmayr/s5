@@ -39,11 +39,11 @@ for _ in range(N_GROWTH):
 # After growth: U has 32 elements, all ∅.
 # U[0] is already ∅ — it becomes ZERO.
 
-# Write COUNTER (universe size = 32) to fd 1 buffer
-instrs.append(inters(U(), U(), IO(2)))  # U ∩ U → IO'2 (writes to fd1 buffer)
+# Write COUNTER (universe size = 32) to fd 0 buffer (normalize)
+instrs.append(inters(U(), U(), IO(1)))  # U ∩ U → IO'1 (writes to fd0 buffer)
 
-# Read back COUNTER from fd 1 buffer into U[2]
-instrs.append(union_(IO(2), UD(4), UD(2)))  # U[2] = IO'2 ∪ U[4]
+# Read back COUNTER from fd 0 buffer into U[2]
+instrs.append(union_(IO(1), UD(4), UD(2)))  # U[2] = IO'1 ∪ U[4]
 
 # ZERO = U[0] = ∅ (already ∅ after growth, no change needed)
 

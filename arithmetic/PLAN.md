@@ -34,8 +34,8 @@ Goal: grow U to 32, install ZERO (=∅), ONE, COUNTER.
 
 1. **Save ONE before growth**: `C = U ∩ U` → preserves `{∅}`.
 2. **Grow U**: self-union ×5 (list-concat semantics: 1→2→4→8→16→32).
-3. **Write COUNTER**: `U ∩ U → IO'1` writes `set_value(U)=32` to fd 1 buffer (also prints to stdout).
-4. **Read COUNTER**: `IO'1 ∪ U[4] → U[2]` reads 32 from fd 1 buffer into U[2].
+3. **Write COUNTER**: `U ∩ U → IO'1` writes `set_value(U)=32` to the fd 0 buffer (normalize, no stdout side effect).
+4. **Read COUNTER**: `IO'1 ∪ U[4] → U[2]` reads 32 from the fd 0 buffer into U[2].
 5. **ZERO**: U[0] is already `∅` after growth — no change needed.
 6. **ONE**: `C ∩ C → U[1]` copies `{∅}` to U[1].
 

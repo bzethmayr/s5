@@ -8,3 +8,11 @@ dist/
 README.mw
 
 *.s5b
+.idea/
+_gen_quine.py
+quine.s5
+stderr.txt
+stdout.txt
+test_io_trick.py
+test_parse.py
+*.diff
