@@ -22,7 +22,7 @@ python = "^3.8"
 pytest = "^7.0"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "ctag", "bct"]
 
 [build-system]
 requires = ["poetry-core"]
