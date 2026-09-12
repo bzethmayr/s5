@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "s5"
-version = "0.5.7"
+version = "0.5.8"
 description = "The Set-Only Language"
 authors = []
 readme = "README.md"
