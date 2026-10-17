@@ -466,6 +466,13 @@ C = input ∪ U = 8-element set prepended to {∅}.
 Multi-byte output uses little-endian division: a set with value 256 emits `\x00\x01`,
 value 0 emits `\x00`.
 
+Reading a byte at **end of input** yields `∅` (see *End of input* below). To keep that
+`∅` unambiguous, a genuine byte `0x00` is returned as the non-empty *abnormal zero*
+`{{∅}}` — numerically 0, but distinguishable from EOF. All other bytes `0x01`–`0xFF`
+are returned as `int_to_s5set(byte)`. This makes byte I/O a lossless, terminating
+stream: `cat.s5` in the repository root echoes stdin to stdout byte-for-byte and stops
+at EOF.
+
 ### S5B I/O: binary token stream input and output
 
 The `sets sets set's'` address performs I/O on binary-encoded s5 token sequences
@@ -523,6 +530,31 @@ at instruction granularity. Subroutines declared via `Set Sets'` (SUBR) are *not
 auto-executed — only S5B-loaded `SubroutineSet` values carry the internal flag to
 trigger this behavior, preventing infinite recursion.
 
+### End of input (EOF sentinel)
+
+Every read address returns the empty set `∅` once its input is exhausted. Because `∅`
+is the sentinel, a program detects end-of-input by testing emptiness — commonly by
+using the read result as a conditional-call guard: a non-empty result runs the loop
+body, while `∅` falls through and the program terminates. No exception is raised and no
+read blocks: end-of-input is an ordinary value you branch on.
+
+To keep `∅` unambiguous, "genuine zero data" is never returned as `∅` where a zero
+datum could otherwise be confused with end-of-input:
+
+| Read address | Genuine zero datum | End of input |
+|---|---|---|
+| Byte I/O (`sets set's'`) | `{{∅}}` ("abnormal zero", value 0, non-empty) | `∅` |
+| S5B I/O (`sets sets set's'`) | *(an empty stream is EOF)* | `∅` |
+| Integer I/O (`set's'`) | `∅` (a `0` line) | `∅` |
+
+Only **Byte I/O** distinguishes a zero datum from EOF. Byte I/O is therefore the
+mechanism for byte-exact streaming (as used by `cat.s5`); integer line I/O treats `0`
+and end-of-input identically, and an empty S5B stream is end-of-input.
+
+`is_eof(value)` in the `s5` Python API returns `True` for the sentinel (it is exactly
+the canonical empty set, so `len(value) == 0`). Reads from an empty **output** file
+descriptor buffer (fd 1 or 2) also yield `∅` rather than raising an error.
+
 ### I/O with indirection (file descriptor I/O)
 
 When a dispatch depth suffix is present on an I/O address, the depth value selects a
@@ -544,11 +576,13 @@ is kept as a **tail** — only the last N bytes written to the descriptor are re
 | fd | Write behavior | Read behavior |
 |----|----------------|---------------|
 | 0 (stdin) | Appends to stdin buffer only (does not write to real stdin) | Reads from stdin buffer first; if empty, falls through to real stdin |
-| 1 (stdout) | Writes to real stdout *and* appends to stdout buffer | Reads from stdout buffer (previously written output) |
-| 2 (stderr) | Writes to real stderr *and* appends to stderr buffer | Reads from stderr buffer (previously written output) |
+| 1 (stdout) | Writes to real stdout *and* appends to stdout buffer | Reads from stdout buffer (previously written output); empty buffer reads as EOF `∅` |
+| 2 (stderr) | Writes to real stderr *and* appends to stderr buffer | Reads from stderr buffer (previously written output); empty buffer reads as EOF `∅` |
 
 This enables in-process piping: a program can write to fd 0 to queue input, or capture
-its own output by reading from fd 1/2.
+its own output by reading from fd 1/2. When a read finds no bytes — either at real
+end-of-input or in an empty fd buffer — it yields the EOF sentinel `∅` (see *End of
+input* above) instead of raising.
 
 ### Subroutine: define, store, and call
 
@@ -586,6 +620,32 @@ Set Sets' set Set's sets                        -- condition is {} → skip
 ```
 
 The first instruction empties U. The second instruction's condition resolves to `∅`, so the subroutine is never called. The program halts immediately after (since `len(U) == 0`).
+
+### Tail calls and unbounded loops
+
+Subroutine calls are the only looping mechanism in S5. The executor runs them on an
+explicit frame stack rather than the Python call stack, and a call that is the **last
+instruction** of a subroutine body is a *tail call*: the current frame is replaced
+rather than nested. A tail-recursive loop therefore runs in constant space regardless
+of how many iterations it makes, and never hits Python's recursion limit. Non-tail
+calls (a call followed by more instructions) nest normally.
+
+### Example: `cat.s5`
+
+`cat.s5` in the repository root is a terminating byte copier built from exactly this
+pattern — read one byte, write it if present, and tail-recurse:
+
+```
+loop:  C = read byte          (Byte I/O)
+       U[1] = C               (save as the guard)
+       call emit if U[1] ≠ ∅  (conditional tail call)
+emit:  write C                (Byte I/O)
+       call loop              (tail call)
+```
+
+At end-of-input the read yields `∅`, the guard fails, and the program stops. Because a
+byte of `0x00` reads back as `{{∅}}` (non-empty), NUL bytes are copied rather than
+mistaken for EOF. Verified byte-exact on multi-megabyte inputs.
 
 ## Computing 42
 

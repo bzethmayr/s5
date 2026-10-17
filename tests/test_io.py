@@ -4,7 +4,7 @@ import io
 from pathlib import Path
 import pytest
 from s5 import (tokenize, Parser, Executor, int_to_s5set, set_value, S5Set,
-                TokenType, Address, AddressType)
+                TokenType, Address, AddressType, EOF, ABNORMAL_ZERO, is_eof)
 
 HERE = Path(__file__).parent
 ROOT = HERE.parent
@@ -340,11 +340,25 @@ class TestIOWithFd:
         result = executor.resolve(addr)
         assert set_value(result) == 123
 
-    def test_read_integer_from_output_fd_empty_raises(self):
+    def test_read_integer_from_output_fd_empty_is_eof(self):
         executor = Executor(buf_sizes={1: 1024})
         addr = self._io_addr(2)
-        with pytest.raises(Exception, match="buffer empty"):
-            executor.resolve(addr)
+        result = executor.resolve(addr)
+        assert result == EOF
+        assert is_eof(result)
+        assert len(result) == 0
+
+    def test_read_integer_from_positional_stdin_at_eof_is_eof(self):
+        executor = Executor()
+        addr = Address(AddressType.IO)
+        old_in = sys.stdin
+        try:
+            sys.stdin = io.StringIO("")
+            result = executor.resolve(addr)
+        finally:
+            sys.stdin = old_in
+        assert result == EOF
+        assert is_eof(result)
 
     def test_write_then_read_integer_through_fd1(self):
         executor = Executor(buf_sizes={1: 1024})
@@ -464,3 +478,42 @@ class TestIOWithFd:
         finally:
             sys.stdin = old_in
         assert set_value(result) == 42
+
+    def test_read_byte_value_zero_is_abnormal_zero(self):
+        executor = Executor(buf_sizes={0: 1024})
+        executor._io._bufs[0] = bytearray(b'\x00')
+        addr = self._byte_io_addr(1)
+        result = executor.resolve(addr)
+        assert set_value(result) == 0
+        assert len(result) == 1
+        assert result == ABNORMAL_ZERO
+        assert not is_eof(result)
+
+    def test_read_byte_at_eof_is_eof(self):
+        executor = Executor(buf_sizes={0: 1024})
+        addr = self._byte_io_addr(1)
+        old_in = sys.stdin
+        try:
+            sys.stdin = io.TextIOWrapper(io.BytesIO(b""))
+            result = executor.resolve(addr)
+        finally:
+            sys.stdin = old_in
+        assert result == EOF
+        assert is_eof(result)
+        assert len(result) == 0
+
+    def test_byte_zero_and_eof_are_distinguishable(self):
+        executor = Executor(buf_sizes={0: 1024})
+        executor._io._bufs[0] = bytearray(b'\x00')
+        addr = self._byte_io_addr(1)
+        zero = executor.resolve(addr)
+        old_in = sys.stdin
+        try:
+            sys.stdin = io.TextIOWrapper(io.BytesIO(b""))
+            eof = executor.resolve(addr)
+        finally:
+            sys.stdin = old_in
+        assert set_value(zero) == set_value(eof) == 0
+        assert is_eof(eof)
+        assert not is_eof(zero)
+        assert zero != eof

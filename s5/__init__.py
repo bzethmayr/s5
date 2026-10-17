@@ -411,6 +411,20 @@ def int_to_s5set(n):
     return S5Set(elements)
 
 
+EOF = S5Set()
+"""In-band end-of-input sentinel: the canonical empty zero (len 0, value 0)."""
+
+ABNORMAL_ZERO = S5Set([S5Set([S5Set()])])
+"""Non-empty representation of value 0 ({{o}}). Genuine zero data (byte 0x00,
+integer "0", empty s5b payload) is read back as this, so that emptiness
+unambiguously denotes end-of-input. Numerically equal to EOF (value 0)."""
+
+
+def is_eof(value):
+    """True iff value is the end-of-input sentinel (the canonical empty zero)."""
+    return isinstance(value, S5Set) and len(value) == 0
+
+
 class LineSet(S5Set):
     __slots__ = ("_instruction",)
 
@@ -463,26 +477,24 @@ class Executor:
         elif addr.type == AddressType.IO_BYTE:
             if addr.has_depth:
                 return self._io.resolve(AddressType.IO_BYTE, addr.dispatch_depth - 1)
-            while True:
-                byte = sys.stdin.buffer.read(1)
-                if byte:
-                    break
-            return int_to_s5set(byte[0])
+            raw = sys.stdin.buffer.read(1)
+            if raw == b"":
+                return EOF
+            byte = raw[0]
+            return ABNORMAL_ZERO if byte == 0 else int_to_s5set(byte)
         elif addr.type == AddressType.IO_S5B:
             if addr.has_depth:
                 return self._io.resolve(AddressType.IO_S5B, addr.dispatch_depth - 1)
-            while True:
-                raw = sys.stdin.buffer.read()
-                if raw:
-                    break
+            raw = sys.stdin.buffer.read()
+            if raw == b"":
+                return EOF
             return _read_s5b(raw)
         elif addr.type == AddressType.IO:
             if addr.has_depth:
                 return self._io.resolve(AddressType.IO, addr.dispatch_depth - 1)
-            while True:
-                line = sys.stdin.readline()
-                if line:
-                    break
+            line = sys.stdin.readline()
+            if line == "":
+                return EOF
             try:
                 n = int(line.strip())
             except ValueError:
@@ -580,6 +592,26 @@ class Executor:
         if len(self.U) == 0:
             self.halted = True
 
+    def _resolve_call(self, instr):
+        """Resolve a subroutine-call instruction to the SubroutineSet to run.
+
+        Returns None when the call's guard condition resolves to the empty set
+        (the call is skipped). Raises on a missing C or a non-subroutine value.
+        """
+        if instr.addr_b is not None:
+            cond_val = self.resolve(instr.addr_b)
+            if len(cond_val) == 0:
+                return None
+        if instr.addr_a is None:
+            if self.C is None:
+                raise RuntimeError_("C is undefined")
+            subr = self.C
+        else:
+            subr = self.resolve(instr.addr_a)
+        if not isinstance(subr, SubroutineSet):
+            raise RuntimeError_("not a subroutine")
+        return subr
+
     def exec_instruction(self, instr):
         if instr.opcode == Opcode.SUBSET_SELECT:
             if self.C is None:
@@ -602,19 +634,9 @@ class Executor:
                 self.assign(instr.addr_a, subroutine)
             self._check_halt()
         elif instr.opcode == Opcode.SUBR:
-            if instr.addr_b is not None:
-                cond_val = self.resolve(instr.addr_b)
-                if len(cond_val) == 0:
-                    return
-            if instr.addr_a is None:
-                if self.C is None:
-                    raise RuntimeError_("C is undefined")
-                subr = self.C
-            else:
-                subr = self.resolve(instr.addr_a)
-            if not isinstance(subr, SubroutineSet):
-                raise RuntimeError_("not a subroutine")
-            self.run(subr._body)
+            subr = self._resolve_call(instr)
+            if subr is not None:
+                self.run(subr._body)
         else:
             a = self.resolve(instr.addr_a)
             b = self.resolve(instr.addr_b)
@@ -631,7 +653,30 @@ class Executor:
             self._check_halt()
 
     def run(self, instructions):
-        for instr in instructions:
+        """Execute an instruction list to completion.
+
+        Subroutine calls are run on an explicit heap-allocated frame stack
+        rather than by Python recursion, so arbitrarily deep S5 recursion
+        never exhausts the Python call stack. A call that is the final
+        instruction of its frame reuses that frame (tail-call optimization),
+        so tail-recursive loops (the S5 idiom) run in constant stack space.
+        """
+        stack = [[instructions, 0]]
+        while stack:
+            frame = stack[-1]
+            body, i = frame
+            if i >= len(body):
+                stack.pop()
+                continue
+            instr = body[i]
+            frame[1] = i + 1
+            if instr.opcode == Opcode.SUBR and instr.subr_body is None:
+                subr = self._resolve_call(instr)
+                if subr is not None:
+                    if frame[1] >= len(body):
+                        stack.pop()
+                    stack.append([subr._body, 0])
+                continue
             self.exec_instruction(instr)
             if self.halted:
                 return "halted"

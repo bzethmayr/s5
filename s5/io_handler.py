@@ -1,6 +1,15 @@
 import sys
 
-from s5 import int_to_s5set, set_value, AddressType, RuntimeError_, _read_s5b, _write_s5b
+from s5 import (
+    int_to_s5set,
+    set_value,
+    AddressType,
+    RuntimeError_,
+    _read_s5b,
+    _write_s5b,
+    EOF,
+    ABNORMAL_ZERO,
+)
 
 
 class IOHandler:
@@ -56,13 +65,11 @@ class IOHandler:
         if addr_type == AddressType.IO:
             line = self._read_line(fd)
             if line is None:
-                if fd == 0:
-                    while True:
-                        line = sys.stdin.readline()
-                        if line:
-                            break
-                else:
-                    raise RuntimeError_(f"input: fd {fd} buffer empty")
+                if fd != 0:
+                    return EOF
+                line = sys.stdin.readline()
+                if line == "":
+                    return EOF
             try:
                 n = int(line.strip())
             except ValueError:
@@ -71,26 +78,22 @@ class IOHandler:
         elif addr_type == AddressType.IO_S5B:
             raw = self._read_all(fd)
             if raw is None:
-                if fd == 0:
-                    while True:
-                        raw = sys.stdin.buffer.read()
-                        if raw:
-                            break
-                else:
-                    raise RuntimeError_(f"input: fd {fd} buffer empty")
+                if fd != 0:
+                    return EOF
+                raw = sys.stdin.buffer.read()
+                if raw == b"":
+                    return EOF
             return _read_s5b(raw)
         else:
             byte = self._read_byte(fd)
             if byte is None:
-                if fd == 0:
-                    while True:
-                        raw = sys.stdin.buffer.read(1)
-                        if raw:
-                            break
-                    byte = raw[0]
-                else:
-                    raise RuntimeError_(f"input: fd {fd} buffer empty")
-            return int_to_s5set(byte)
+                if fd != 0:
+                    return EOF
+                raw = sys.stdin.buffer.read(1)
+                if raw == b"":
+                    return EOF
+                byte = raw[0]
+            return ABNORMAL_ZERO if byte == 0 else int_to_s5set(byte)
 
     def assign(self, addr_type, fd, value):
         if addr_type == AddressType.IO:

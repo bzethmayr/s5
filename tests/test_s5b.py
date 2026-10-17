@@ -19,6 +19,8 @@ from s5 import (
     decode_tokens,
     _write_s5b,
     _read_s5b,
+    EOF,
+    is_eof,
 )
 from s5.serialize import serialize_address, serialize_instruction, serialize_body, serialize_integer
 
@@ -395,8 +397,22 @@ class TestIOS5BWithFd:
         assert isinstance(result, SubroutineSet)
         assert len(result._body) == 1
 
-    def test_read_fd1_buffer_empty_raises(self):
+    def test_read_fd1_buffer_empty_is_eof(self):
         io_handler = __import__('s5.io_handler', fromlist=['IOHandler']).IOHandler
         handler = io_handler()
-        with pytest.raises(Exception):
-            handler.resolve(AddressType.IO_S5B, 1)
+        result = handler.resolve(AddressType.IO_S5B, 1)
+        assert result == EOF
+        assert is_eof(result)
+        assert len(result) == 0
+
+    def test_read_fd0_at_eof_is_eof(self):
+        io_handler = __import__('s5.io_handler', fromlist=['IOHandler']).IOHandler
+        handler = io_handler()
+        old_in = sys.stdin
+        try:
+            sys.stdin = io.TextIOWrapper(io.BytesIO(b""))
+            result = handler.resolve(AddressType.IO_S5B, 0)
+        finally:
+            sys.stdin = old_in
+        assert result == EOF
+        assert is_eof(result)

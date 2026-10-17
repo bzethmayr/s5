@@ -89,7 +89,7 @@ def _mounted(program, data, **kw):
     finally:
         sys.stdin = old_stdin
     assert status == "finished", f"program did not finish: {status}"
-    return exec.utor
+    return executor
 
 
 def _read(ex, slot):
